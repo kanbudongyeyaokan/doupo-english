@@ -79,7 +79,7 @@ npm run preview
 
 ## 导入《考研英语词汇红宝书》私人资料
 
-### 本次私人资料处理结果（2026-07-27）
+### 本次私人资料处理结果（2026-07-28）
 
 - 用户提供的 `27考研红宝书 考研英语词汇.pdf` 共 442 个 PDF 页面，是没有可用文字层的扫描型 PDF。
 - PDF 第 1–364 页已完成 OCR 和结构提取，得到 3,859 个稳定 ID 词条，覆盖“必考词 Unit 1–26”和“基础词 Unit 1–25”当前可见部分，共 51 个单元。
@@ -87,6 +87,7 @@ npm run preview
 - 完整私人包位于 `private-materials/imports/redbook-27-complete.json`，审计文件位于同目录的 `redbook-27-complete-audit.json`，另有 13 个每批 4 单元的包位于 `redbook-27-complete-batches/`。
 - 51 个逐单元包位于 `private-materials/imports/redbook-27-complete-units/`，从 `01-required-unit-01.json`（必考词 Unit 1，68 词）到 `51-foundation-unit-25.json`（基础词 Unit 25 当前可见 14 词）。可以一次导入完整包，也可以严格按单元顺序合并导入。
 - 必考词 Unit 1 的首组 12 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-first-12.json`。顺序为 `radiate`、`radiant`、`radical`、`object`、`objective`、`objection`、`obligation`、`oblige`、`obscure`、`observation`、`observe`、`obsession`；词头、音标、核心释义、搭配和例句已逐项对照 PDF 书页 1–2。该文件被 Git 忽略，不会发布到公开仓库。
+- 必考词 Unit 1 的第 13–24 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-13-24.json`。顺序为 `obsolete`、`obtain`、`obvious`、`ideal`、`ideology`、`identical`、`identification`、`identify`、`identity`、`journal`、`journalist`、`journey`；内容已逐项对照 PDF 书页 2–3，并通过稳定 ID、连续顺序、重复导入去重和学习状态保留验证。该文件同样不会发布到公开仓库。
 - PDF 第 365–442 页的内嵌 JPEG 数据流只有 2 字节 `0xFFD9`，页面无法渲染或 OCR；“基础词 Unit 25”因此在 PDF 第 364 页后中断，缺失内容没有猜填。需要补充一份完好的 PDF 或从 PDF 第 365 页开始的清晰扫描，才能继续提取。
 - 上述路径均被 Git 忽略。公开在线应用不内置商业词书内容；在手机上需要把私人 JSON 保存到“文件”，再进入“我的 → 导入 JSON / CSV → 合并导入”。不同浏览器或已安装 PWA 的数据空间可能相互独立。
 
