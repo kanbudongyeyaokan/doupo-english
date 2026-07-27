@@ -100,6 +100,7 @@ npm run preview
 - 必考词 Unit 4 的首组 12 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-first-12.json`。内容已逐项对照 PDF 书页 24–25，按照单元预览页第一列顺序编号 1–12；同时纠正了 OCR 对末词来源页的跨页误判。该包已通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、笔记、标签、收藏、错词状态和本地图片引用保留验证。
 - 必考词 Unit 4 的第 13–24 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-13-24.json`。顺序为 `call`、`calm`、`campaign`、`candidate`、`data`、`database`、`date`、`dazzle`、`deal`、`dealer`、`debate`、`decade`；内容已逐项对照 PDF 书页 25–27，并通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、笔记、标签、收藏和本地图片引用保留验证。
 - 必考词 Unit 4 的第 25–36 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-25-36.json`。顺序为 `decide`、`decision`、`decisive`、`decorate`、`economic`、`economical`、`economics`、`economy`、`educate`、`education`、`effect`、`effective`；内容已逐项对照 PDF 书页 27–28，并通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、错词状态、笔记、标签、收藏和本地图片引用保留验证。
+- 必考词 Unit 4 的第 37–48 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-37-48.json`。顺序为 `efficiency`、`efficient`、`effort`、`fabric`、`fabricate`、`face`、`facet`、`factor`、`fade`、`fail`、`failure`、`fair`；内容已逐项对照 PDF 书页 28–29，并纠正了 `factor` 被 OCR 误标为跨页词条的问题。该包已通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、错词状态、笔记、标签、收藏和本地图片引用保留验证。
 - PDF 第 365–442 页的内嵌 JPEG 数据流只有 2 字节 `0xFFD9`，页面无法渲染或 OCR；“基础词 Unit 25”因此在 PDF 第 364 页后中断，缺失内容没有猜填。需要补充一份完好的 PDF 或从 PDF 第 365 页开始的清晰扫描，才能继续提取。
 - 上述路径均被 Git 忽略。公开在线应用不内置商业词书内容；在手机上需要把私人 JSON 保存到“文件”，再进入“我的 → 导入 JSON / CSV → 合并导入”。不同浏览器或已安装 PWA 的数据空间可能相互独立。
 
