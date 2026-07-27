@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DoupoEnglishDatabase, deleteWords, equipStoreItem, initializeDatabase, purchaseStoreItem, recordCompanionInteraction, reviewWord, saveWord } from './db'
+import { defaultProfile, DoupoEnglishDatabase, deleteWords, equipStoreItem, initializeDatabase, purchaseStoreItem, recordCompanionInteraction, reviewWord, saveWord } from './db'
 import { createWordRecord } from './domain/word'
 
 const databases: DoupoEnglishDatabase[] = []
@@ -11,6 +11,16 @@ function makeDb() {
   return database
 }
 
+async function addReviewWord(database: DoupoEnglishDatabase, term = 'retain') {
+  const word = createWordRecord({
+    term,
+    meanings: [{ partOfSpeech: 'v.', meanings: ['保留；记住'] }],
+    examples: [{ english: `Learners ${term} words through review.`, chinese: '学习者通过复习记住单词。' }]
+  })
+  await database.words.put(word)
+  return word
+}
+
 afterEach(async () => {
   await Promise.all(databases.splice(0).map(async (database) => {
     database.close()
@@ -19,6 +29,12 @@ afterEach(async () => {
 })
 
 describe('DoupoEnglishDatabase', () => {
+  it('starts with an empty private vocabulary instead of public demo words', async () => {
+    const database = makeDb()
+    await initializeDatabase(database)
+    expect(await database.words.count()).toBe(0)
+  })
+
   it('supports create, edit, search and protected delete', async () => {
     const database = makeDb()
     await initializeDatabase(database)
@@ -35,7 +51,7 @@ describe('DoupoEnglishDatabase', () => {
   it('persists all four review ratings and updates FSRS', async () => {
     const database = makeDb()
     await initializeDatabase(database)
-    const word = (await database.words.toArray())[0]
+    const word = await addReviewWord(database)
     const before = word.fsrs.due
     const ratings = ['again', 'hard', 'good', 'easy'] as const
     for (let index = 0; index < ratings.length; index += 1) {
@@ -50,7 +66,7 @@ describe('DoupoEnglishDatabase', () => {
   it('records mastered words, bond rewards and one companion interaction per day', async () => {
     const database = makeDb()
     await initializeDatabase(database)
-    const word = (await database.words.toArray())[0]
+    const word = await addReviewWord(database)
     const review = await reviewWord(word.id, 'good', 'spelling', word.term, database, new Date('2026-07-27T08:00:00+08:00').getTime())
     expect(review.newlyMastered).toBe(true)
     expect(review.bondEarned).toBe(3)
@@ -68,7 +84,7 @@ describe('DoupoEnglishDatabase', () => {
   it('awards anti-farm spirit stones and persists store purchases and equipment', async () => {
     const database = makeDb()
     await initializeDatabase(database)
-    const word = (await database.words.toArray())[0]
+    const word = await addReviewWord(database)
     const now = new Date('2026-07-27T08:00:00+08:00').getTime()
     const first = await reviewWord(word.id, 'good', 'spelling', word.term, database, now)
     const repeated = await reviewWord(word.id, 'easy', 'spelling', word.term, database, now + 60_000)
@@ -100,11 +116,36 @@ describe('DoupoEnglishDatabase', () => {
     const upgraded = new DoupoEnglishDatabase(name)
     databases.push(upgraded)
     await upgraded.open()
-    expect(upgraded.verno).toBe(5)
+    expect(upgraded.verno).toBe(6)
     expect((await upgraded.words.get(createWordRecord({ term: 'legacy' }).id))?.imageIds).toEqual([])
     expect((await upgraded.profiles.get('player'))?.name).toBe('何耀焜')
     expect((await upgraded.profiles.get('player'))?.masteredWordIds).toEqual([])
     expect((await upgraded.profiles.get('player'))?.spiritStones).toBe(0)
     expect((await upgraded.profiles.get('player'))?.inventoryItemIds).toContain('novice-robe')
+  })
+
+  it('removes only the 12-word demo source during the v6 migration', async () => {
+    const name = `doupo-english-demo-migration-${crypto.randomUUID()}`
+    const legacy = new Dexie(name)
+    legacy.version(5).stores({
+      words: 'id, normalizedTerm, fsrs.due, isMistake, isFavorite, isKey, source, chapter, unit, *tags',
+      reviews: '++id, wordId, reviewedAt, rating, mode, isCorrect',
+      assets: 'id, wordId, kind, accent, createdAt',
+      profiles: 'id', settings: 'id', xpEvents: 'id, wordId, kind, createdAt, dayKey',
+      spiritStoneEvents: 'id, wordId, itemId, kind, createdAt, dayKey', rewards: 'id, earnedAt, rarity', snapshots: 'id, createdAt'
+    })
+    await legacy.open()
+    const demo = createWordRecord({ term: 'abandon', source: '斗破英语原创示例词库', tags: ['示例'] })
+    const privateWord = createWordRecord({ term: 'pioneer', source: '红宝书（2027 考研英语词汇）私人 OCR' })
+    await legacy.table('words').bulkPut([demo, privateWord])
+    await legacy.table('profiles').put({ ...defaultProfile, masteredWordIds: [demo.id, privateWord.id] })
+    legacy.close()
+
+    const upgraded = new DoupoEnglishDatabase(name)
+    databases.push(upgraded)
+    await upgraded.open()
+    expect(await upgraded.words.get(demo.id)).toBeUndefined()
+    expect(await upgraded.words.get(privateWord.id)).toBeDefined()
+    expect((await upgraded.profiles.get('player'))?.masteredWordIds).toEqual([privateWord.id])
   })
 })

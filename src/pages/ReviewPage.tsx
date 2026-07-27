@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, Check, ChevronRight, Eye, Gem, HeartHandshake, Keyboard, ListChecks, Shuffle, Sparkles, Volume2, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, Check, ChevronRight, Eye, Gem, HeartHandshake, Keyboard, ListChecks, Shuffle, Sparkles, Volume2, X } from 'lucide-react'
 import { createRecoverySnapshot, db, defaultProfile, defaultSettings, reviewWord } from '../db'
 import { getCompanionDialogue, getCompanionProgress, getMasteredCount } from '../domain/companion'
 import { formatInterval, previewIntervals } from '../domain/fsrs'
 import { buildChoiceOptions, clozeSentence, judgeSpelling } from '../domain/quiz'
+import { inUnit } from '../domain/units'
 import type { ReviewMode, ReviewRating, RewardCard, WordRecord } from '../types'
 import { WordImage } from '../components/WordImage'
 
@@ -24,8 +25,17 @@ function readOptions() {
   const params = new URLSearchParams(query)
   return {
     queue: params.get('queue') || 'due',
-    mode: (params.get('mode') || 'en-zh') as ReviewMode
+    mode: (params.get('mode') || 'en-zh') as ReviewMode,
+    chapter: params.get('chapter') || '',
+    unit: params.get('unit') || ''
   }
+}
+
+function reviewHash(queue: string, mode: ReviewMode, chapter: string, unit: string) {
+  const params = new URLSearchParams({ queue, mode })
+  if (chapter) params.set('chapter', chapter)
+  if (unit) params.set('unit', unit)
+  return `#/review?${params.toString()}`
 }
 
 function primaryMeaning(word: WordRecord) {
@@ -126,12 +136,13 @@ export function ReviewPage() {
   const [reward, setReward] = useState<RewardCard | undefined>()
   const [saving, setSaving] = useState(false)
   const answerInput = useRef<HTMLInputElement>(null)
+  const scopedWords = useMemo(() => allWords?.filter((word) => inUnit(word, options.chapter, options.unit)), [allWords, options.chapter, options.unit])
 
   useEffect(() => {
-    if (!allWords || queueIds) return
+    if (!scopedWords || queueIds) return
     const limit = options.queue === 'new' ? settings.dailyNewLimit : settings.focusBatchSize
-    setQueueIds(buildQueue(allWords, options.queue, limit).map((word) => word.id))
-  }, [allWords, options.queue, queueIds, settings.dailyNewLimit, settings.focusBatchSize])
+    setQueueIds(buildQueue(scopedWords, options.queue, limit).map((word) => word.id))
+  }, [options.queue, queueIds, scopedWords, settings.dailyNewLimit, settings.focusBatchSize])
 
   const queue = useMemo(() => queueIds?.map((id) => allWords?.find((word) => word.id === id)).filter(Boolean) as WordRecord[] | undefined, [allWords, queueIds])
   const word = queue?.[index]
@@ -152,10 +163,10 @@ export function ReviewPage() {
       <div className="completion-seal"><Check size={34} /></div>
       <span className="eyebrow">今日队列已清</span>
       <h1>气息平稳，适合收功</h1>
-      <p>当前没有符合条件的单词。可以学习新词，或随机抽取一词巩固。</p>
+      <p>{options.unit ? `${options.chapter} ${options.unit} 当前没有符合条件的单词。` : '当前没有符合条件的单词。'}可以学习新词，或随机抽取一词巩固。</p>
       <div className="completion-actions">
-        <button className="primary" type="button" onClick={() => { window.location.hash = '#/review?queue=new&mode=en-zh' }}>学习新词</button>
-        <button type="button" onClick={() => { window.location.hash = '#/review?queue=random&mode=flash' }}>随机抽词</button>
+        <button className="primary" type="button" onClick={() => { window.location.hash = reviewHash('new', 'en-zh', options.chapter, options.unit) }}>学习新词</button>
+        <button type="button" onClick={() => { window.location.hash = reviewHash('random', 'flash', options.chapter, options.unit) }}>随机抽词</button>
       </div>
     </main>
   )
@@ -218,6 +229,7 @@ export function ReviewPage() {
         <strong>{index + 1}/{queue.length}</strong>
         <label className="mode-select"><span className="sr-only">复习模式</span><select value={mode} onChange={(event) => setMode(event.target.value as ReviewMode)}>{MODES.map((item) => <option value={item.id} key={item.id}>{item.short}</option>)}</select></label>
       </div>
+      {options.unit && <div className="review-scope"><BookOpen size={14} />{options.chapter}<strong>{options.unit}</strong></div>}
 
       <article className={revealed ? 'review-card revealed' : 'review-card'}>
         <div className="prompt-area">

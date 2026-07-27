@@ -176,7 +176,7 @@ export function ProfilePage({ canInstall, installed, onInstall }: ProfilePagePro
 
       <section className="settings-section">
         <div className="section-heading"><div><span className="eyebrow">最近 5 个</span><h2>本地恢复快照</h2></div><ArchiveRestore size={21} /></div>
-        <div className="snapshot-list">{data.snapshots.length ? data.snapshots.map((snapshot) => <div key={snapshot.id}><span><strong>{snapshot.reason}</strong><small>{new Date(snapshot.createdAt).toLocaleString('zh-CN', { hour12: false })}</small></span><button type="button" onClick={() => restore(snapshot.id)}>恢复</button></div>) : <p className="muted">完成一次复习、编辑或导入后会自动建立快照。</p>}</div>
+        <div className="snapshot-list">{data.snapshots.length ? data.snapshots.map((snapshot) => <div key={snapshot.id}><span><strong>{snapshot.reason}</strong><small>{new Date(snapshot.createdAt).toLocaleString('zh-CN', { hour12: false })}</small></span><button type="button" onClick={() => restore(snapshot.id)}>恢复</button></div>) : <p className="muted">完成专注组或执行导入、编辑、删除等操作时会自动建立快照。</p>}</div>
       </section>
 
       <section className="settings-section">

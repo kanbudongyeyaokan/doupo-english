@@ -35,7 +35,12 @@ describe('backup and import', () => {
   it('restores words, review logs and binary assets from a full JSON package', async () => {
     const source = makeDb()
     await initializeDatabase(source)
-    const word = (await source.words.toArray())[0]
+    const word = createWordRecord({
+      term: 'restore',
+      meanings: [{ partOfSpeech: 'v.', meanings: ['恢复'] }],
+      examples: [{ english: 'A backup can restore the record.', chinese: '备份可以恢复记录。' }]
+    })
+    await source.words.put(word)
     const blob = new Blob(['image-bytes'], { type: 'image/png' })
     const assetId = `asset-${word.id}`
     await source.assets.put({ id: assetId, wordId: word.id, kind: 'image', name: 'page.png', mimeType: 'image/png', blob, createdAt: Date.now() })

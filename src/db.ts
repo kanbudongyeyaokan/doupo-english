@@ -1,5 +1,4 @@
 import Dexie, { type EntityTable } from 'dexie'
-import { seedWords } from './data/seed'
 import {
   calculateBondReward,
   getCompanionDialogue,
@@ -32,6 +31,7 @@ import type {
 } from './types'
 
 export const DATABASE_NAME = 'doupo-english-private-vault-v1'
+const DEMO_WORD_SOURCE = '斗破英语原创示例词库'
 
 export const defaultProfile: PlayerProfile = {
   id: 'player',
@@ -85,7 +85,9 @@ export function normalizePlayerProfile(profile?: Partial<PlayerProfile>, inferre
 
 export const defaultSettings: AppSettings = {
   id: 'app',
-  seeded: false,
+  seeded: true,
+  selectedChapter: '',
+  selectedUnit: '',
   theme: 'system',
   soundEnabled: true,
   hapticsEnabled: true,
@@ -182,6 +184,36 @@ export class DoupoEnglishDatabase extends Dexie {
       const profile = await profiles.get('player')
       if (profile) await profiles.put(normalizePlayerProfile(profile))
     })
+
+    this.version(6).stores({
+      words: 'id, normalizedTerm, fsrs.due, isMistake, isFavorite, isKey, source, chapter, unit, *tags',
+      reviews: '++id, wordId, reviewedAt, rating, mode, isCorrect',
+      assets: 'id, wordId, kind, accent, createdAt',
+      profiles: 'id',
+      settings: 'id',
+      xpEvents: 'id, wordId, kind, createdAt, dayKey',
+      spiritStoneEvents: 'id, wordId, itemId, kind, createdAt, dayKey',
+      rewards: 'id, earnedAt, rarity',
+      snapshots: 'id, createdAt'
+    }).upgrade(async (transaction) => {
+      const words = transaction.table<WordRecord>('words')
+      const profiles = transaction.table<PlayerProfile>('profiles')
+      const settings = transaction.table<AppSettings>('settings')
+      const demoWords = await words.where('source').equals(DEMO_WORD_SOURCE).toArray()
+      const demoIds = new Set(demoWords.map((word) => word.id))
+      if (demoIds.size) await words.bulkDelete([...demoIds])
+
+      const profile = await profiles.get('player')
+      if (profile) {
+        const normalized = normalizePlayerProfile(profile)
+        await profiles.put({
+          ...normalized,
+          masteredWordIds: normalized.masteredWordIds.filter((id) => !demoIds.has(id))
+        })
+      }
+      const appSettings = await settings.get('app')
+      if (appSettings) await settings.put({ ...defaultSettings, ...appSettings, seeded: true })
+    })
   }
 }
 
@@ -189,18 +221,13 @@ export const db = new DoupoEnglishDatabase()
 
 export async function initializeDatabase(database = db) {
   await database.open()
-  const [profile, settings, wordCount] = await Promise.all([
+  const [profile, settings] = await Promise.all([
     database.profiles.get('player'),
-    database.settings.get('app'),
-    database.words.count()
+    database.settings.get('app')
   ])
   if (!profile) await database.profiles.put(defaultProfile)
   else await database.profiles.put(normalizePlayerProfile(profile))
   const effectiveSettings = settings ? { ...defaultSettings, ...settings } : { ...defaultSettings }
-  if (!effectiveSettings.seeded) {
-    if (wordCount === 0) await database.words.bulkPut(seedWords)
-    effectiveSettings.seeded = true
-  }
   await database.settings.put({ ...effectiveSettings, updatedAt: Date.now() })
   await requestPersistentStorage(database)
 }

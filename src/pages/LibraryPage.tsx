@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CheckSquare, ChevronDown, Edit3, Filter, Plus, Search, Square, Star, Tag, Trash2 } from 'lucide-react'
+import { BookOpen, CheckSquare, ChevronDown, Edit3, Filter, Plus, Search, Square, Star, Tag, Trash2 } from 'lucide-react'
 import { db, deleteWords, createRecoverySnapshot } from '../db'
+import { summarizeUnits } from '../domain/units'
 import type { WordRecord } from '../types'
 import { WordForm } from '../components/WordForm'
 
@@ -12,26 +13,32 @@ export function LibraryPage() {
   const words = useLiveQuery(() => db.words.orderBy('normalizedTerm').toArray(), [])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<FilterValue>('all')
+  const [chapter, setChapter] = useState('')
+  const [unit, setUnit] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<WordRecord | null | undefined>(undefined)
   const [bulkTag, setBulkTag] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const deferredQuery = useDeferredValue(query)
 
-  const wordList = words || []
+  const wordList = useMemo(() => words || [], [words])
+  const unitSummaries = useMemo(() => summarizeUnits(wordList), [wordList])
+  const chapters = [...new Set(unitSummaries.map((item) => item.chapter))]
+  const units = chapter ? unitSummaries.filter((item) => item.chapter === chapter) : []
   const filtered = useMemo(() => {
     const needle = deferredQuery.trim().toLocaleLowerCase()
     return (words || []).filter((word) => {
       const matchText = !needle || [word.term, word.phonetic, word.notes, word.source, ...word.tags, ...word.meanings.flatMap((item) => item.meanings)].join(' ').toLocaleLowerCase().includes(needle)
       const matchFilter = filter === 'all' || (filter === 'favorite' && word.isFavorite) || (filter === 'key' && word.isKey) || (filter === 'mistake' && word.isMistake) || (filter === 'unlearned' && !word.firstLearnedAt)
-      return matchText && matchFilter
+      const matchUnit = (!chapter || word.chapter === chapter) && (!unit || word.unit === unit)
+      return matchText && matchFilter && matchUnit
     })
-  }, [deferredQuery, filter, words])
+  }, [chapter, deferredQuery, filter, unit, words])
   const visibleWords = filtered.slice(0, visibleCount)
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [deferredQuery, filter])
+  }, [chapter, deferredQuery, filter, unit])
 
   const toggleSelection = (id: string) => {
     setSelected((current) => {
@@ -71,6 +78,10 @@ export function LibraryPage() {
         <label className="search-field"><Search size={19} /><span className="sr-only">搜索单词</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索单词、释义、标签或来源" /></label>
         <label className="filter-field"><Filter size={18} /><span className="sr-only">筛选词库</span><select value={filter} onChange={(event) => setFilter(event.target.value as FilterValue)}><option value="all">全部</option><option value="favorite">已收藏</option><option value="key">重点词</option><option value="mistake">易错词</option><option value="unlearned">未学习</option></select></label>
       </div>
+      {unitSummaries.length > 0 && <div className="unit-filter-row">
+        <label><BookOpen size={17} /><span className="sr-only">筛选章节</span><select value={chapter} onChange={(event) => { setChapter(event.target.value); setUnit('') }}><option value="">全部词表</option>{chapters.map((item) => <option value={item} key={item}>{item}</option>)}</select></label>
+        <label><span className="sr-only">筛选单元</span><select value={unit} disabled={!chapter} onChange={(event) => setUnit(event.target.value)}><option value="">{chapter ? '全部单元' : '先选择词表'}</option>{units.map((item) => <option value={item.unit} key={`${item.chapter}-${item.unit}`}>{item.unit} · {item.total}</option>)}</select></label>
+      </div>}
 
       {selected.size > 0 && <div className="bulk-toolbar" role="toolbar" aria-label="批量操作">
         <strong>已选 {selected.size}</strong>
@@ -88,7 +99,7 @@ export function LibraryPage() {
             <button type="button" className="word-summary" onClick={() => setEditing(word)}>
               <span className="word-main"><strong>{word.term}</strong><small>{word.phonetic}</small></span>
               <span className="word-meaning">{word.meanings.flatMap((item) => item.meanings).slice(0, 2).join('；')}</span>
-              <span className="word-meta">{word.isKey && <b>重点</b>}{word.isMistake && <b className="error">易错</b>}{word.isFavorite && <Star size={14} fill="currentColor" />}{word.tags.slice(0, 2).map((tag) => <i key={tag}>{tag}</i>)}</span>
+              <span className="word-meta">{word.chapter && word.unit && <i>{word.chapter} · {word.unit}</i>}{word.isKey && <b>重点</b>}{word.isMistake && <b className="error">易错</b>}{word.isFavorite && <Star size={14} fill="currentColor" />}{word.tags.slice(0, 1).map((tag) => <i key={tag}>{tag}</i>)}</span>
             </button>
             <div className="row-actions"><button type="button" onClick={() => setEditing(word)} aria-label={`编辑 ${word.term}`} title="编辑"><Edit3 /></button><button type="button" onClick={() => remove([word.id])} aria-label={`删除 ${word.term}`} title="删除"><Trash2 /></button></div>
           </article>

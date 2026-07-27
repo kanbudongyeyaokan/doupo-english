@@ -144,6 +144,8 @@ export interface SpiritStoneEvent {
 export interface AppSettings {
   id: 'app'
   seeded: boolean
+  selectedChapter: string
+  selectedUnit: string
   theme: 'system' | 'light' | 'dark'
   soundEnabled: boolean
   hapticsEnabled: boolean
