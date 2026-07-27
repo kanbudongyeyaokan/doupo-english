@@ -92,7 +92,9 @@ npm run preview
 - 必考词 Unit 1 的第 13–24 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-13-24.json`。顺序为 `obsolete`、`obtain`、`obvious`、`ideal`、`ideology`、`identical`、`identification`、`identify`、`identity`、`journal`、`journalist`、`journey`；内容已逐项对照 PDF 书页 2–3，并通过稳定 ID、连续顺序、重复导入去重和学习状态保留验证。该文件同样不会发布到公开仓库。
 - 必考词 Unit 1 的第 25–36 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-25-36.json`。顺序为 `judge`、`judgment/judgement`、`judicial`、`jury`、`jurisdiction`、`justice`、`justify`、`label`、`lag`、`largely`、`lateral`、`latter`；内容已逐项对照 PDF 书页 3–4，并验证旧 OCR 占位会被校订内容和正确页码替换。
 - 必考词 Unit 1 的第 37–48 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-37-48.json`。顺序为 `law`、`lawsuit`、`magnitude`、`magnify`、`magnificent`、`maintain`、`maintenance`、`major`、`majority`、`make`、`theme`、`theory`；内容已逐项对照 PDF 书页 4–6。
-- 手机端可直接使用累计包 `private-materials/imports/redbook-27-required-unit-01-first-48.json`，一次合并导入前四批校订内容。累计包已通过 48 个稳定 ID、连续顺序和重复导入去重验证。
+- 必考词 Unit 1 的第 49–60 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-49-60.json`。顺序为 `theoretical`、`therapy`、`qualification`、`qualify`、`quality`、`qualitative`、`safeguard`、`safety`、`savage`、`save`、`saving`、`scale`；内容已逐项对照 PDF 书页 6。
+- 必考词 Unit 1 的第 61–68 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-61-68.json`。顺序为 `scene`、`scenery`、`pace`、`panel`、`panorama`、`prove`、`provide`、`provided`；内容已逐项对照 PDF 书页 6–7，跨页词条保留了两个原始页码。
+- 手机端按单元导入请直接使用完整累计包 `private-materials/imports/redbook-27-required-unit-01-first-68.json`。它会用人工校订内容替换 Unit 1 的 OCR 字段，同时保留已有 FSRS 排期、学习记录、笔记、标签、收藏和媒体；已通过 68 个稳定 ID、连续顺序和重复导入去重验证。
 - PDF 第 365–442 页的内嵌 JPEG 数据流只有 2 字节 `0xFFD9`，页面无法渲染或 OCR；“基础词 Unit 25”因此在 PDF 第 364 页后中断，缺失内容没有猜填。需要补充一份完好的 PDF 或从 PDF 第 365 页开始的清晰扫描，才能继续提取。
 - 上述路径均被 Git 忽略。公开在线应用不内置商业词书内容；在手机上需要把私人 JSON 保存到“文件”，再进入“我的 → 导入 JSON / CSV → 合并导入”。不同浏览器或已安装 PWA 的数据空间可能相互独立。
 
