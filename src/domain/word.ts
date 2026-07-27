@@ -18,6 +18,21 @@ export function createStableWordId(term: string, source = '个人词库') {
   return `word-${stableHash(`${normalizeTerm(term)}|${normalizeTerm(source)}`)}`
 }
 
+const sourceAuditTags = new Set(['OCR扫描导入', '词头人工校对', '释义待核对', '音标待核对', '正文待核对'])
+const sourceAuditNotePattern = /^OCR平均置信度 \d+(?:\.\d+)?%；[^。\n]+。待核对原始页：书页\d+（PDF \d+）(?:、书页\d+（PDF \d+）)*$/
+
+function mergeUnique(left: string[], right: string[]) {
+  return [...new Set([...left, ...right].filter(Boolean))]
+}
+
+function stripSourceAuditNotes(notes: string) {
+  return notes.split('\n').map((line) => line.trim()).filter((line) => line && !sourceAuditNotePattern.test(line)).join('\n')
+}
+
+function mergeNotes(...notes: string[]) {
+  return notes.filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n')
+}
+
 export function createWordRecord(
   input: Pick<WordRecord, 'term'> & Partial<Omit<WordRecord, 'term'>>,
   now = Date.now()
@@ -62,17 +77,16 @@ export function createWordRecord(
 }
 
 export function refreshWordFromSource(local: WordRecord, incoming: WordRecord): WordRecord {
-  const mergeUnique = (left: string[], right: string[]) => [...new Set([...left, ...right].filter(Boolean))]
   const hasLearningHistory = Boolean(local.firstLearnedAt || local.lastReviewedAt || local.fsrs.reps)
   return {
     ...incoming,
     id: local.id,
     normalizedTerm: normalizeTerm(incoming.term),
-    tags: mergeUnique(local.tags, incoming.tags),
+    tags: mergeUnique(local.tags.filter((tag) => !sourceAuditTags.has(tag)), incoming.tags),
     imageIds: mergeUnique(local.imageIds, incoming.imageIds),
     audioBritishId: incoming.audioBritishId || local.audioBritishId,
     audioAmericanId: incoming.audioAmericanId || local.audioAmericanId,
-    notes: [local.notes, incoming.notes].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n'),
+    notes: mergeNotes(stripSourceAuditNotes(local.notes), incoming.notes),
     isKey: local.isKey || incoming.isKey,
     isMistake: local.isMistake,
     isFavorite: local.isFavorite,
@@ -85,7 +99,6 @@ export function refreshWordFromSource(local: WordRecord, incoming: WordRecord): 
 }
 
 export function mergeWord(local: WordRecord, incoming: WordRecord): WordRecord {
-  const mergeUnique = (left: string[], right: string[]) => [...new Set([...left, ...right].filter(Boolean))]
   const meaningMap = new Map<string, string[]>()
   for (const group of [...local.meanings, ...incoming.meanings]) {
     meaningMap.set(group.partOfSpeech, mergeUnique(meaningMap.get(group.partOfSpeech) || [], group.meanings))
@@ -107,7 +120,7 @@ export function mergeWord(local: WordRecord, incoming: WordRecord): WordRecord {
     ),
     tags: mergeUnique(local.tags, incoming.tags),
     imageIds: mergeUnique(local.imageIds, incoming.imageIds),
-    notes: [local.notes, incoming.notes].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n'),
+    notes: mergeNotes(local.notes, incoming.notes),
     isKey: local.isKey || incoming.isKey,
     isMistake: local.isMistake || incoming.isMistake,
     isFavorite: local.isFavorite || incoming.isFavorite,

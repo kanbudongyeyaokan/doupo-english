@@ -29,6 +29,8 @@
 
 `v0.4.1` 起，词条支持 `sourceOrder` 单元内顺序。带有 `batch.updateStrategy: "source-authoritative"` 的人工校订包会用新版本替换同一稳定 ID 的教材释义、例句、音标、搭配等来源字段，同时保留 FSRS 排期、学习时间、收藏、易错标记、用户笔记、本地图片和音频。普通“合并导入”包仍沿用追加去重语义。
 
+`v0.4.2` 起，人工校订包还会清除已被新内容替代的 `OCR扫描导入`、`音标待核对`、`释义待核对`、`正文待核对` 等系统审计标签及其自动备注；用户自己填写的笔记和自定义标签仍会保留。
+
 ## 本地运行
 
 需要 Node.js 20 以上，推荐 Node.js 22。
@@ -88,6 +90,7 @@ npm run preview
 - 51 个逐单元包位于 `private-materials/imports/redbook-27-complete-units/`，从 `01-required-unit-01.json`（必考词 Unit 1，68 词）到 `51-foundation-unit-25.json`（基础词 Unit 25 当前可见 14 词）。可以一次导入完整包，也可以严格按单元顺序合并导入。
 - 必考词 Unit 1 的首组 12 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-first-12.json`。顺序为 `radiate`、`radiant`、`radical`、`object`、`objective`、`objection`、`obligation`、`oblige`、`obscure`、`observation`、`observe`、`obsession`；词头、音标、核心释义、搭配和例句已逐项对照 PDF 书页 1–2。该文件被 Git 忽略，不会发布到公开仓库。
 - 必考词 Unit 1 的第 13–24 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-13-24.json`。顺序为 `obsolete`、`obtain`、`obvious`、`ideal`、`ideology`、`identical`、`identification`、`identify`、`identity`、`journal`、`journalist`、`journey`；内容已逐项对照 PDF 书页 2–3，并通过稳定 ID、连续顺序、重复导入去重和学习状态保留验证。该文件同样不会发布到公开仓库。
+- 必考词 Unit 1 的第 25–36 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-25-36.json`。顺序为 `judge`、`judgment/judgement`、`judicial`、`jury`、`jurisdiction`、`justice`、`justify`、`label`、`lag`、`largely`、`lateral`、`latter`；内容已逐项对照 PDF 书页 3–4，并验证旧 OCR 占位会被校订内容和正确页码替换。
 - PDF 第 365–442 页的内嵌 JPEG 数据流只有 2 字节 `0xFFD9`，页面无法渲染或 OCR；“基础词 Unit 25”因此在 PDF 第 364 页后中断，缺失内容没有猜填。需要补充一份完好的 PDF 或从 PDF 第 365 页开始的清晰扫描，才能继续提取。
 - 上述路径均被 Git 忽略。公开在线应用不内置商业词书内容；在手机上需要把私人 JSON 保存到“文件”，再进入“我的 → 导入 JSON / CSV → 合并导入”。不同浏览器或已安装 PWA 的数据空间可能相互独立。
 

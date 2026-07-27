@@ -10,7 +10,7 @@ import type {
   WordRecord
 } from '../types'
 
-export const APP_VERSION = '0.4.1'
+export const APP_VERSION = '0.4.2'
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = ''

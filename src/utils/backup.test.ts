@@ -41,7 +41,8 @@ describe('backup and import', () => {
       source: 'private redbook',
       meanings: [{ partOfSpeech: 'adv.', meanings: ['OCR 旧释义'] }],
       examples: [{ english: 'This country is largelyed esert.', chinese: '旧例句' }],
-      notes: '我的本地笔记',
+      notes: 'OCR平均置信度 99.0%；音标待核对、释义待核对。待核对原始页：书页1（PDF 9）\n我的本地笔记',
+      tags: ['红宝书私人导入', 'OCR扫描导入', '音标待核对', '释义待核对', '自定义标签'],
       isFavorite: true,
       firstLearnedAt: 1000,
       fsrs: { due: 5000, stability: 2, difficulty: 3, elapsed_days: 1, scheduled_days: 2, learning_steps: 0, reps: 4, lapses: 0, state: 2 }
@@ -53,7 +54,8 @@ describe('backup and import', () => {
       sourceOrder: 2,
       meanings: [{ partOfSpeech: 'adv.', meanings: ['大量地，大规模地', '主要地，基本上'] }],
       examples: [{ english: 'This country is largely desert.', chinese: '这个国家大部分都是沙漠。' }],
-      notes: '教材页已人工校对'
+      notes: '教材页已人工校对',
+      tags: ['红宝书私人导入', '人工校对']
     })
     const pkg: VocabularyPackage = {
       format: 'doupo-english-vocabulary',
@@ -71,6 +73,13 @@ describe('backup and import', () => {
     expect(refreshed?.firstLearnedAt).toBe(1000)
     expect(refreshed?.fsrs).toEqual(original.fsrs)
     expect(refreshed?.notes).toContain('我的本地笔记')
+    expect(refreshed?.notes).toContain('教材页已人工校对')
+    expect(refreshed?.notes).not.toContain('OCR平均置信度')
+    expect(refreshed?.tags).toContain('自定义标签')
+    expect(refreshed?.tags).toContain('人工校对')
+    expect(refreshed?.tags).not.toContain('OCR扫描导入')
+    expect(refreshed?.tags).not.toContain('音标待核对')
+    expect(refreshed?.tags).not.toContain('释义待核对')
   })
 
   it('restores words, review logs and binary assets from a full JSON package', async () => {
