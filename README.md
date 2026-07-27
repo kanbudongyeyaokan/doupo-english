@@ -96,6 +96,7 @@ npm run preview
 - 必考词 Unit 1 的第 61–68 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-01-61-68.json`。顺序为 `scene`、`scenery`、`pace`、`panel`、`panorama`、`prove`、`provide`、`provided`；内容已逐项对照 PDF 书页 6–7，跨页词条保留了两个原始页码。
 - 手机端按单元导入请直接使用完整累计包 `private-materials/imports/redbook-27-required-unit-01-first-68.json`。它会用人工校订内容替换 Unit 1 的 OCR 字段，同时保留已有 FSRS 排期、学习记录、笔记、标签、收藏和媒体；已通过 68 个稳定 ID、连续顺序和重复导入去重验证。
 - 必考词 Unit 2 的完整 65 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-02-curated.json`。内容已逐项对照 PDF 书页 8–15，按照单元预览页的七列顺序编号 1–65；跨页词条记录起始页和续页。该包已通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、笔记、收藏和本地图片引用保留验证。
+- 必考词 Unit 3 的完整 83 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-03-curated.json`。内容已逐项对照 PDF 书页 16–23，按照单元预览页的七列顺序编号 1–83；英美拼写和跨页词条均保留来源说明。该包已通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、笔记、收藏和本地图片引用保留验证。
 - PDF 第 365–442 页的内嵌 JPEG 数据流只有 2 字节 `0xFFD9`，页面无法渲染或 OCR；“基础词 Unit 25”因此在 PDF 第 364 页后中断，缺失内容没有猜填。需要补充一份完好的 PDF 或从 PDF 第 365 页开始的清晰扫描，才能继续提取。
 - 上述路径均被 Git 忽略。公开在线应用不内置商业词书内容；在手机上需要把私人 JSON 保存到“文件”，再进入“我的 → 导入 JSON / CSV → 合并导入”。不同浏览器或已安装 PWA 的数据空间可能相互独立。
 
