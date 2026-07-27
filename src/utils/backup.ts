@@ -1,5 +1,5 @@
 import Papa from 'papaparse'
-import { db, defaultProfile, defaultSettings, type DoupoEnglishDatabase, createRecoverySnapshot } from '../db'
+import { db, defaultSettings, type DoupoEnglishDatabase, createRecoverySnapshot, normalizePlayerProfile } from '../db'
 import { createWordRecord, mergeWord } from '../domain/word'
 import type {
   BackupPackage,
@@ -10,7 +10,7 @@ import type {
   WordRecord
 } from '../types'
 
-export const APP_VERSION = '0.1.0'
+export const APP_VERSION = '0.3.0'
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = ''
@@ -37,17 +37,19 @@ export function dataUrlToBlob(dataUrl: string) {
 }
 
 export async function collectSnapshotPayload(database: DoupoEnglishDatabase = db): Promise<SnapshotPayload> {
-  const [words, reviews, assets, profile, settings, xpEvents, rewards] = await Promise.all([
+  const [words, reviews, assets, profile, settings, xpEvents, spiritStoneEvents, rewards] = await Promise.all([
     database.words.toArray(), database.reviews.toArray(), database.assets.toArray(),
-    database.profiles.get('player'), database.settings.get('app'), database.xpEvents.toArray(), database.rewards.toArray()
+    database.profiles.get('player'), database.settings.get('app'), database.xpEvents.toArray(),
+    database.spiritStoneEvents.toArray(), database.rewards.toArray()
   ])
   return {
     words,
     reviews,
     assets,
-    profile: profile || defaultProfile,
+    profile: normalizePlayerProfile(profile),
     settings: settings || defaultSettings,
     xpEvents,
+    spiritStoneEvents,
     rewards
   }
 }
@@ -60,7 +62,7 @@ export async function createBackupPackage(database: DoupoEnglishDatabase = db): 
   })))
   return {
     format: 'doupo-english-backup',
-    schemaVersion: 3,
+    schemaVersion: 5,
     exportedAt: new Date().toISOString(),
     appVersion: APP_VERSION,
     payload: { ...payload, assets }
@@ -79,7 +81,7 @@ export function parseImportText(text: string): BackupPackage | VocabularyPackage
   if (!parsed || (parsed.format !== 'doupo-english-backup' && parsed.format !== 'doupo-english-vocabulary')) {
     throw new Error('不是有效的斗破英语备份包或词库包')
   }
-  if (parsed.format === 'doupo-english-backup' && parsed.schemaVersion > 3) throw new Error('备份版本高于当前应用，请先升级应用')
+  if (parsed.format === 'doupo-english-backup' && parsed.schemaVersion > 5) throw new Error('备份版本高于当前应用，请先升级应用')
   return parsed
 }
 
@@ -126,18 +128,20 @@ export async function importPackage(
     const assets = deserializeAssets(data.payload.assets)
     await database.transaction('rw', [
       database.words, database.reviews, database.assets, database.profiles,
-      database.settings, database.xpEvents, database.rewards
+      database.settings, database.xpEvents, database.spiritStoneEvents, database.rewards
     ], async () => {
       await Promise.all([
         database.words.clear(), database.reviews.clear(), database.assets.clear(),
-        database.profiles.clear(), database.settings.clear(), database.xpEvents.clear(), database.rewards.clear()
+        database.profiles.clear(), database.settings.clear(), database.xpEvents.clear(),
+        database.spiritStoneEvents.clear(), database.rewards.clear()
       ])
       await database.words.bulkPut(words)
       await database.reviews.bulkPut(data.payload.reviews)
       await database.assets.bulkPut(assets)
-      await database.profiles.put(data.payload.profile)
+      await database.profiles.put(normalizePlayerProfile(data.payload.profile))
       await database.settings.put({ ...defaultSettings, ...data.payload.settings, seeded: true, updatedAt: Date.now() })
       await database.xpEvents.bulkPut(data.payload.xpEvents)
+      await database.spiritStoneEvents.bulkPut(data.payload.spiritStoneEvents || [])
       await database.rewards.bulkPut(data.payload.rewards)
     })
   } else {
@@ -151,19 +155,29 @@ export async function importPackage(
       const newReviews = data.payload.reviews.filter((item) => !reviewKeys.has(`${item.wordId}:${item.reviewedAt}:${item.mode}`))
       if (newReviews.length) await database.reviews.bulkAdd(newReviews.map(({ id: _id, ...item }) => item))
       await database.xpEvents.bulkPut(data.payload.xpEvents)
+      await database.spiritStoneEvents.bulkPut(data.payload.spiritStoneEvents || [])
       await database.rewards.bulkPut(data.payload.rewards)
-      const localProfile = (await database.profiles.get('player')) || defaultProfile
+      const localProfile = normalizePlayerProfile(await database.profiles.get('player'))
+      const incomingProfile = normalizePlayerProfile(data.payload.profile)
       await database.profiles.put({
         ...localProfile,
-        xp: Math.max(localProfile.xp, data.payload.profile.xp),
-        streak: Math.max(localProfile.streak, data.payload.profile.streak),
-        longestStreak: Math.max(localProfile.longestStreak, data.payload.profile.longestStreak),
-        totalReviews: Math.max(localProfile.totalReviews, data.payload.profile.totalReviews),
-        totalNewWords: Math.max(localProfile.totalNewWords, data.payload.profile.totalNewWords),
-        spellingCorrect: Math.max(localProfile.spellingCorrect, data.payload.profile.spellingCorrect),
-        recoveredMistakes: Math.max(localProfile.recoveredMistakes, data.payload.profile.recoveredMistakes),
-        unlockedTitles: [...new Set([...localProfile.unlockedTitles, ...data.payload.profile.unlockedTitles])],
-        unlockedAchievements: [...new Set([...localProfile.unlockedAchievements, ...data.payload.profile.unlockedAchievements])]
+        xp: Math.max(localProfile.xp, incomingProfile.xp),
+        streak: Math.max(localProfile.streak, incomingProfile.streak),
+        longestStreak: Math.max(localProfile.longestStreak, incomingProfile.longestStreak),
+        totalReviews: Math.max(localProfile.totalReviews, incomingProfile.totalReviews),
+        totalNewWords: Math.max(localProfile.totalNewWords, incomingProfile.totalNewWords),
+        spellingCorrect: Math.max(localProfile.spellingCorrect, incomingProfile.spellingCorrect),
+        recoveredMistakes: Math.max(localProfile.recoveredMistakes, incomingProfile.recoveredMistakes),
+        companionBond: Math.max(localProfile.companionBond, incomingProfile.companionBond),
+        companionInteractions: Math.max(localProfile.companionInteractions, incomingProfile.companionInteractions),
+        spiritStones: Math.max(localProfile.spiritStones, incomingProfile.spiritStones),
+        lifetimeSpiritStones: Math.max(localProfile.lifetimeSpiritStones, incomingProfile.lifetimeSpiritStones),
+        inventoryItemIds: [...new Set([...localProfile.inventoryItemIds, ...incomingProfile.inventoryItemIds])],
+        equippedItemIds: incomingProfile.equippedItemIds.length ? incomingProfile.equippedItemIds : localProfile.equippedItemIds,
+        lastCompanionInteractionDate: [localProfile.lastCompanionInteractionDate, incomingProfile.lastCompanionInteractionDate].sort().at(-1) || '',
+        masteredWordIds: [...new Set([...localProfile.masteredWordIds, ...incomingProfile.masteredWordIds])],
+        unlockedTitles: [...new Set([...localProfile.unlockedTitles, ...incomingProfile.unlockedTitles])],
+        unlockedAchievements: [...new Set([...localProfile.unlockedAchievements, ...incomingProfile.unlockedAchievements])]
       })
     }
   }

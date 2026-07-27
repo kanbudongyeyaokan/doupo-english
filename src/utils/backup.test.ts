@@ -40,6 +40,9 @@ describe('backup and import', () => {
     await source.words.update(word.id, { imageIds: [assetId] })
     await reviewWord(word.id, 'good', 'spelling', word.term, source)
     const backup = await createBackupPackage(source)
+    expect(backup.schemaVersion).toBe(5)
+    expect(backup.payload.profile.masteredWordIds).toContain(word.id)
+    expect(backup.payload.spiritStoneEvents.length).toBeGreaterThan(0)
 
     const target = makeDb()
     await initializeDatabase(target)
@@ -49,6 +52,9 @@ describe('backup and import', () => {
     const restoredAsset = await target.assets.get(assetId)
     expect(await restoredAsset?.blob.text()).toBe('image-bytes')
     expect((await target.words.get(word.id))?.imageIds).toContain(assetId)
+    expect((await target.profiles.get('player'))?.companionBond).toBeGreaterThan(0)
+    expect((await target.profiles.get('player'))?.spiritStones).toBeGreaterThan(0)
+    expect(await target.spiritStoneEvents.count()).toBe(backup.payload.spiritStoneEvents.length)
   })
 
   it('round-trips core word fields through CSV', () => {
@@ -59,4 +65,3 @@ describe('backup and import', () => {
     expect(parsed[0].tags).toContain('test')
   })
 })
-

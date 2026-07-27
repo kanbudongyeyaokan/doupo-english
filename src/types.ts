@@ -80,6 +80,8 @@ export interface ReviewLogRecord {
   isCorrect: boolean
   answer?: string
   xpEarned: number
+  bondEarned?: number
+  spiritStonesEarned?: number
 }
 
 export interface AssetRecord {
@@ -95,6 +97,7 @@ export interface AssetRecord {
 
 export interface PlayerProfile {
   id: 'player'
+  name: string
   xp: number
   streak: number
   longestStreak: number
@@ -106,6 +109,36 @@ export interface PlayerProfile {
   selectedTitle: string
   unlockedTitles: string[]
   unlockedAchievements: string[]
+  masteredWordIds: string[]
+  companionBond: number
+  companionInteractions: number
+  lastCompanionInteractionDate: string
+  spiritStones: number
+  lifetimeSpiritStones: number
+  inventoryItemIds: string[]
+  equippedItemIds: string[]
+}
+
+export type StoreItemCategory = 'robe' | 'aura' | 'accessory'
+
+export interface StoreItem {
+  id: string
+  name: string
+  description: string
+  category: StoreItemCategory
+  price: number
+  rarity: 'common' | 'rare' | 'epic'
+  swatch: string
+}
+
+export interface SpiritStoneEvent {
+  id: string
+  wordId?: string
+  itemId?: string
+  kind: 'review' | 'mastery' | 'on-time' | 'spelling' | 'mistake-recovered' | 'purchase'
+  amount: number
+  createdAt: number
+  dayKey: string
 }
 
 export interface AppSettings {
@@ -146,6 +179,7 @@ export interface SnapshotPayload {
   profile: PlayerProfile
   settings: AppSettings
   xpEvents: XpEvent[]
+  spiritStoneEvents: SpiritStoneEvent[]
   rewards: RewardCard[]
 }
 
@@ -162,7 +196,7 @@ export interface SerializableAsset extends Omit<AssetRecord, 'blob'> {
 
 export interface BackupPackage {
   format: 'doupo-english-backup'
-  schemaVersion: 3
+  schemaVersion: 3 | 4 | 5
   exportedAt: string
   appVersion: string
   payload: Omit<SnapshotPayload, 'assets'> & { assets: SerializableAsset[] }

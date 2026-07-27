@@ -4,13 +4,21 @@ export const REALMS = ['斗者', '斗师', '大斗师', '斗灵', '斗王', '斗
 
 export const TITLES = [
   { name: '初入迦南', test: (p: PlayerProfile) => p.totalReviews >= 1 },
+  { name: '晨读散修', test: (p: PlayerProfile) => p.streak >= 3 },
+  { name: '百词筑基者', test: (p: PlayerProfile) => p.masteredWordIds.length >= 100 },
   { name: '词海猎手', test: (p: PlayerProfile) => p.totalNewWords >= 100 },
+  { name: '青焰藏家', test: (p: PlayerProfile) => p.inventoryItemIds.length >= 3 },
+  { name: '灵石执掌者', test: (p: PlayerProfile) => p.lifetimeSpiritStones >= 500 },
   { name: '记忆药师', test: (p: PlayerProfile) => p.totalReviews >= 500 },
   { name: '熟词破境者', test: (p: PlayerProfile) => p.recoveredMistakes >= 30 },
   { name: '拼写执法者', test: (p: PlayerProfile) => p.spellingCorrect >= 100 },
+  { name: '七日守心人', test: (p: PlayerProfile) => p.longestStreak >= 7 },
   { name: '长难句行者', test: (p: PlayerProfile) => p.totalReviews >= 1000 },
+  { name: '知夏同路人', test: (p: PlayerProfile) => p.companionBond >= 100 },
+  { name: '千词守藏者', test: (p: PlayerProfile) => p.masteredWordIds.length >= 1000 },
   { name: '黑角域词王', test: (p: PlayerProfile) => p.streak >= 30 },
   { name: '天府词宗', test: (p: PlayerProfile) => p.totalReviews >= 3000 },
+  { name: '百日长修者', test: (p: PlayerProfile) => p.longestStreak >= 100 },
   { name: '九星词圣', test: (p: PlayerProfile) => getRealmProgress(p.xp).globalStar >= 89 },
   { name: '万词斗帝', test: (p: PlayerProfile) => p.totalNewWords >= 10000 }
 ]
@@ -108,4 +116,3 @@ export function updateStreak(profile: PlayerProfile, timestamp = Date.now()) {
     lastStudyDate: today
   }
 }
-

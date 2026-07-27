@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArchiveRestore, Award, Check, ChevronRight, Database, Download, FileJson, FileSpreadsheet, HardDrive, Info, Moon, Smartphone, Upload } from 'lucide-react'
-import { db, defaultProfile, defaultSettings, restoreSnapshot } from '../db'
+import { ArchiveRestore, Award, Check, ChevronRight, Database, Download, FileJson, FileSpreadsheet, Gem, HardDrive, HeartHandshake, Info, LockKeyhole, Moon, ShoppingBag, Smartphone, Upload } from 'lucide-react'
+import { db, defaultProfile, defaultSettings, equipStoreItem, purchaseStoreItem, recordCompanionInteraction, restoreSnapshot } from '../db'
+import { CompanionScene, PlayerPortrait } from '../components/CompanionScene'
+import { COMPANION_MILESTONES, getCompanionProgress, getMasteredCount } from '../domain/companion'
 import { dayKey, getRealmProgress } from '../domain/gamification'
+import { STORE_ITEMS } from '../domain/economy'
 import type { AppSettings, BackupPackage, ImportPreview, VocabularyPackage } from '../types'
 import { exportBackup, exportWordsCsv, importPackage, parseImportText, parseWordsCsv, previewImport } from '../utils/backup'
 
@@ -35,10 +38,13 @@ export function ProfilePage({ canInstall, installed, onInstall }: ProfilePagePro
   const fileInput = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<PendingImport | null>(null)
   const [message, setMessage] = useState('')
+  const [companionMessage, setCompanionMessage] = useState('')
   const [working, setWorking] = useState(false)
 
   if (!data) return <main className="page page-state">正在读取本机档案...</main>
   const realm = getRealmProgress(data.profile.xp)
+  const masteredCount = getMasteredCount(data.profile)
+  const companionProgress = getCompanionProgress(masteredCount)
 
   const updateSettings = async (patch: Partial<AppSettings>) => {
     await db.settings.put({ ...data.settings, ...patch, updatedAt: Date.now() })
@@ -79,14 +85,80 @@ export function ProfilePage({ canInstall, installed, onInstall }: ProfilePagePro
     setMessage('本地快照已恢复')
   }
 
+  const interactWithCompanion = async () => {
+    try {
+      const result = await recordCompanionInteraction()
+      setCompanionMessage(result.message)
+      setMessage(result.bondEarned ? `与知夏完成今日互动，共鸣 +${result.bondEarned}` : '今天已经互动过了')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '互动暂时不可用')
+    }
+  }
+
+  const handleStoreItem = async (itemId: string) => {
+    try {
+      const owned = data.profile.inventoryItemIds.includes(itemId)
+      if (!owned) await purchaseStoreItem(itemId)
+      const result = await equipStoreItem(itemId)
+      setMessage(`${owned ? '已装备' : '已购买并装备'}：${result.item.name}`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '商城操作失败')
+    }
+  }
+
   return (
     <main id="main-content" className="page profile-page">
       <section className="profile-hero">
-        <div className="profile-seal"><span>{realm.realm[0]}</span></div>
-        <div><span className="eyebrow">个人修炼档案</span><h1>{realm.realm} <small>{realm.star} 星</small></h1><p>{data.profile.selectedTitle} · 累计 {data.profile.totalReviews} 次复习</p></div>
+        <PlayerPortrait profile={data.profile} />
+        <div><span className="eyebrow">焜火学者 · 个人修炼档案</span><h1>{data.profile.name} <small>{realm.realm} {realm.star} 星</small></h1><p>{data.profile.selectedTitle} · 累计掌握 {masteredCount} 词</p><span className="wallet-pill"><Gem size={14} />{data.profile.spiritStones} 灵石</span></div>
       </section>
 
       <section className="profile-stats" aria-label="学习统计"><div><strong>{data.profile.streak}</strong><span>连续天数</span></div><div><strong>{data.profile.longestStreak}</strong><span>最长连胜</span></div><div><strong>{data.profile.spellingCorrect}</strong><span>拼写正确</span></div><div><strong>{data.profile.recoveredMistakes}</strong><span>攻克错词</span></div></section>
+
+      <CompanionScene
+        profile={data.profile}
+        detailed
+        onInteract={interactWithCompanion}
+        interactionMessage={companionMessage}
+      />
+
+      <section className="settings-section store-section">
+        <div className="section-heading"><div><span className="eyebrow">只靠有效复习获得</span><h2>灵石坊 · 个人装扮</h2></div><ShoppingBag size={21} /></div>
+        <div className="store-balance"><Gem size={18} /><span><strong>{data.profile.spiritStones}</strong> 可用灵石</span><small>累计获得 {data.profile.lifetimeSpiritStones}</small></div>
+        <div className="store-grid">
+          {STORE_ITEMS.map((item) => {
+            const owned = data.profile.inventoryItemIds.includes(item.id)
+            const equipped = data.profile.equippedItemIds.includes(item.id)
+            return (
+              <article className={`store-item rarity-${item.rarity}`} key={item.id}>
+                <span className="store-swatch" style={{ background: item.swatch }} aria-hidden="true" />
+                <div><strong>{item.name}</strong><small>{item.description}</small></div>
+                <button type="button" disabled={equipped} onClick={() => handleStoreItem(item.id)}>
+                  {equipped ? <><Check size={15} />已装备</> : owned ? '装备' : <><Gem size={14} />{item.price}</>}
+                </button>
+              </article>
+            )
+          })}
+        </div>
+        <p className="store-note">同一单词 6 小时内重复操作不会再次获得灵石；按时复习、新掌握、拼写正确与攻克错词会提高单次收益。</p>
+      </section>
+
+      <section className="settings-section relationship-section">
+        <div className="section-heading"><div><span className="eyebrow">词数驱动，不靠充值</span><h2>知夏关系里程碑</h2></div><HeartHandshake size={21} /></div>
+        <div className="relationship-milestones">
+          {COMPANION_MILESTONES.map((milestone) => {
+            const unlocked = masteredCount >= milestone.threshold
+            const current = companionProgress.current.id === milestone.id
+            return (
+              <div className={`${unlocked ? 'unlocked' : 'locked'} ${current ? 'current' : ''}`} key={milestone.id}>
+                <span>{unlocked ? <Check size={16} /> : <LockKeyhole size={16} />}</span>
+                <p><strong>{milestone.threshold} 词 · {milestone.relation}</strong><small>{milestone.title}</small></p>
+                <b>{unlocked ? milestone.keepsake : `${Math.max(0, milestone.threshold - masteredCount)} 词`}</b>
+              </div>
+            )
+          })}
+        </div>
+      </section>
 
       <section className="settings-section">
         <div className="section-heading"><div><span className="eyebrow">安全优先</span><h2>数据保险箱</h2></div><Database size={21} /></div>

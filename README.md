@@ -20,6 +20,10 @@
 - 安全：尽力申请 persistent storage；复习、编辑、删除和导入后自动保留最近 5 个本地恢复快照
 - PWA：离线启动、安装到桌面、在线升级提示、GitHub Pages 子路径部署
 - 修炼系统：11 个境界、每境 1–9 星、连胜、日/周任务、称号、收藏奖励与专注组结算
+- 原创动画形象：“焜火学者·何耀焜”会根据已装备衣装、配饰和气息改变外观，动画遵循“减少动画”设置
+- 知夏陪伴线：20/50 词解锁线索与同桌剧情，累计掌握 100 词才确认女朋友身份，250/500 词继续解锁长期关系里程碑
+- 共鸣与互动：真实强记忆获得共鸣，女朋友剧情解锁后每天可互动一次；同词短时重复不结算奖励
+- 灵石坊：有效复习、新掌握、拼写正确和修复错词获得灵石，可购买并装备原创衣装、配饰和气息，不含充值入口
 
 内置的 12 个单词仅为原创 MVP 示例，不是《红宝书》原文。个人购买资料、扫描页、长原文和书页图片不应提交到公开仓库。
 
@@ -57,7 +61,9 @@ npm run preview
 
 ## 数据保存边界
 
-应用代码与个人数据是分开的。普通刷新、关闭重开、离线启动、Service Worker 更新和应用版本升级不会清空 IndexedDB。Dexie 使用固定数据库名，并通过 `version(1) → version(2) → version(3)` 迁移升级；后续不能随意换名或删除旧版本迁移。
+应用代码与个人数据是分开的。普通刷新、关闭重开、离线启动、Service Worker 更新和应用版本升级不会清空 IndexedDB。Dexie 使用固定数据库名，并通过 `version(1) → version(2) → version(3) → version(4) → version(5)` 迁移升级；v4 增加掌握词与知夏进度，v5 增加灵石、装扮和事件账本。后续不能随意换名或删除旧版本迁移。
+
+在线版本会在启动、每 30 分钟、重新获得窗口焦点以及从后台回到前台时检查更新。发现新版本后由用户点击“立即升级”，只更换缓存的应用文件，不删除 IndexedDB 中的词库、FSRS 排期、关系进度、灵石和装扮。
 
 仍需了解浏览器存储的边界：
 
@@ -121,7 +127,9 @@ CSV 导入会生成稳定 ID并按 ID 合并。要完整搬家或恢复学习状
 - 稳定 ID 重复导入去重
 - 完整 JSON 中的单词、学习记录和 Blob 图片恢复
 - CSV 往返
-- Dexie v1 → v3 数据库迁移
+- Dexie v1 → v5 数据库迁移，以及旧档案字段归一化
+- 100 词女朋友门槛、关系阶段、共鸣结算和每日互动防重复
+- 灵石结算、短时防刷、购买与按类别装备
 - 最近 5 个恢复快照
 
 生产构建还会生成 manifest、Service Worker 和完整 precache。浏览器验收应同时检查 375×812 手机和桌面视口、离线重新载入、安装 manifest、升级提示和 `/doupo-english/` 子路径静态资源。
@@ -146,7 +154,10 @@ https://<GitHub 用户名>.github.io/<仓库名>/
 ## 目录
 
 ```text
-src/db.ts                 Dexie v1-v3、事务、快照、复习写入
+src/db.ts                 Dexie v1-v5、事务、快照、复习/共鸣/灵石写入
+src/domain/companion.ts   知夏关系门槛、阶段、共鸣和本地对话
+src/domain/economy.ts     灵石收益、原创装扮、购买与装备规则
+src/components/CompanionScene.tsx 何耀焜与知夏的 CSS 动画形象
 src/domain/fsrs.ts        ts-fsrs 适配与序列化
 src/domain/gamification.ts 境界、称号、经验与防刷规则
 src/domain/quiz.ts        拼写、填空和干扰项排序
@@ -155,4 +166,3 @@ src/pages/ReviewPage.tsx  八种学习模式与四档评价
 vite.config.ts            PWA manifest、Workbox 与 Pages base
 .github/workflows/        测试、构建和 Pages 部署
 ```
-

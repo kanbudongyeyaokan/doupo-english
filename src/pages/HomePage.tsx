@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowRight, CalendarClock, Dices, Flame, RotateCcw, Sparkles, Target } from 'lucide-react'
+import { ArrowRight, CalendarClock, Dices, Flame, Gem, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { db, defaultProfile, defaultSettings } from '../db'
 import { dayKey, getRealmProgress } from '../domain/gamification'
+import { CompanionScene } from '../components/CompanionScene'
 
 function startReview(queue: string, mode = 'en-zh') {
   window.location.hash = `#/review?queue=${queue}&mode=${mode}`
@@ -45,6 +46,7 @@ export function HomePage() {
           <span className="eyebrow">今日修炼</span>
           <h1 id="realm-title">{realm.realm}<small>{realm.star} 星</small></h1>
           <p>{data.profile.selectedTitle} · 连续 {data.profile.streak} 天</p>
+          <span className="wallet-pill"><Gem size={14} />{data.profile.spiritStones} 灵石</span>
         </div>
         <div className="realm-seal" aria-hidden="true"><Flame size={27} /></div>
         <div className="progress-block">
@@ -59,6 +61,11 @@ export function HomePage() {
         <div><strong>{dailyProgress}%</strong><span>今日进度</span></div>
         <div><strong>{data.total}</strong><span>词库总数</span></div>
       </section>
+
+      <CompanionScene
+        profile={data.profile}
+        onPrimaryAction={() => startReview(data.due > 0 ? 'due' : 'new')}
+      />
 
       <section className="section-block" aria-labelledby="today-plan">
         <div className="section-heading">
@@ -101,4 +108,3 @@ export function HomePage() {
     </main>
   )
 }
-

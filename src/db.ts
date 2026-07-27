@@ -1,5 +1,19 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { seedWords } from './data/seed'
+import {
+  calculateBondReward,
+  getCompanionDialogue,
+  getCompanionProgress,
+  getMasteredCount,
+  inferMasteredWordIds
+} from './domain/companion'
+import {
+  calculateSpiritStoneReward,
+  DEFAULT_EQUIPPED,
+  DEFAULT_INVENTORY,
+  equipByCategory,
+  getStoreItem
+} from './domain/economy'
 import { calculateReviewXp, getRealmProgress, refreshTitles, updateStreak } from './domain/gamification'
 import { scheduleReview } from './domain/fsrs'
 import { createWordRecord } from './domain/word'
@@ -12,6 +26,7 @@ import type {
   ReviewMode,
   ReviewRating,
   RewardCard,
+  SpiritStoneEvent,
   WordRecord,
   XpEvent
 } from './types'
@@ -20,6 +35,7 @@ export const DATABASE_NAME = 'doupo-english-private-vault-v1'
 
 export const defaultProfile: PlayerProfile = {
   id: 'player',
+  name: '何耀焜',
   xp: 0,
   streak: 0,
   longestStreak: 0,
@@ -30,7 +46,41 @@ export const defaultProfile: PlayerProfile = {
   recoveredMistakes: 0,
   selectedTitle: '初入迦南',
   unlockedTitles: [],
-  unlockedAchievements: []
+  unlockedAchievements: [],
+  masteredWordIds: [],
+  companionBond: 0,
+  companionInteractions: 0,
+  lastCompanionInteractionDate: '',
+  spiritStones: 0,
+  lifetimeSpiritStones: 0,
+  inventoryItemIds: DEFAULT_INVENTORY,
+  equippedItemIds: DEFAULT_EQUIPPED
+}
+
+export function normalizePlayerProfile(profile?: Partial<PlayerProfile>, inferredMasteredWordIds: string[] = []): PlayerProfile {
+  return {
+    ...defaultProfile,
+    ...profile,
+    name: profile?.name || defaultProfile.name,
+    unlockedTitles: Array.isArray(profile?.unlockedTitles) ? profile.unlockedTitles : [],
+    unlockedAchievements: Array.isArray(profile?.unlockedAchievements) ? profile.unlockedAchievements : [],
+    masteredWordIds: [...new Set([
+      ...(Array.isArray(profile?.masteredWordIds) ? profile.masteredWordIds : []),
+      ...inferredMasteredWordIds
+    ])],
+    companionBond: profile?.companionBond ?? 0,
+    companionInteractions: profile?.companionInteractions ?? 0,
+    lastCompanionInteractionDate: profile?.lastCompanionInteractionDate || '',
+    spiritStones: profile?.spiritStones ?? 0,
+    lifetimeSpiritStones: profile?.lifetimeSpiritStones ?? profile?.spiritStones ?? 0,
+    inventoryItemIds: [...new Set([
+      ...DEFAULT_INVENTORY,
+      ...(Array.isArray(profile?.inventoryItemIds) ? profile.inventoryItemIds : [])
+    ])],
+    equippedItemIds: Array.isArray(profile?.equippedItemIds) && profile.equippedItemIds.length
+      ? profile.equippedItemIds
+      : DEFAULT_EQUIPPED
+  }
 }
 
 export const defaultSettings: AppSettings = {
@@ -53,6 +103,7 @@ export class DoupoEnglishDatabase extends Dexie {
   profiles!: EntityTable<PlayerProfile, 'id'>
   settings!: EntityTable<AppSettings, 'id'>
   xpEvents!: EntityTable<XpEvent, 'id'>
+  spiritStoneEvents!: EntityTable<SpiritStoneEvent, 'id'>
   rewards!: EntityTable<RewardCard, 'id'>
   snapshots!: EntityTable<RecoverySnapshot, 'id'>
 
@@ -81,7 +132,7 @@ export class DoupoEnglishDatabase extends Dexie {
       const settings = transaction.table<AppSettings>('settings')
       const profile = await profiles.get('player')
       const appSettings = await settings.get('app')
-      if (profile) await profiles.put({ ...defaultProfile, ...profile })
+      if (profile) await profiles.put(normalizePlayerProfile(profile))
       if (appSettings) await settings.put({ ...defaultSettings, ...appSettings, seeded: true })
     })
 
@@ -99,6 +150,38 @@ export class DoupoEnglishDatabase extends Dexie {
         Object.assign(word, createWordRecord(word, word.createdAt || Date.now()))
       })
     })
+
+    this.version(4).stores({
+      words: 'id, normalizedTerm, fsrs.due, isMistake, isFavorite, isKey, source, chapter, unit, *tags',
+      reviews: '++id, wordId, reviewedAt, rating, mode, isCorrect',
+      assets: 'id, wordId, kind, accent, createdAt',
+      profiles: 'id',
+      settings: 'id',
+      xpEvents: 'id, wordId, kind, createdAt, dayKey',
+      rewards: 'id, earnedAt, rarity',
+      snapshots: 'id, createdAt'
+    }).upgrade(async (transaction) => {
+      const profiles = transaction.table<PlayerProfile>('profiles')
+      const words = await transaction.table<WordRecord>('words').toArray()
+      const profile = await profiles.get('player')
+      if (profile) await profiles.put(normalizePlayerProfile(profile, inferMasteredWordIds(words)))
+    })
+
+    this.version(5).stores({
+      words: 'id, normalizedTerm, fsrs.due, isMistake, isFavorite, isKey, source, chapter, unit, *tags',
+      reviews: '++id, wordId, reviewedAt, rating, mode, isCorrect',
+      assets: 'id, wordId, kind, accent, createdAt',
+      profiles: 'id',
+      settings: 'id',
+      xpEvents: 'id, wordId, kind, createdAt, dayKey',
+      spiritStoneEvents: 'id, wordId, itemId, kind, createdAt, dayKey',
+      rewards: 'id, earnedAt, rarity',
+      snapshots: 'id, createdAt'
+    }).upgrade(async (transaction) => {
+      const profiles = transaction.table<PlayerProfile>('profiles')
+      const profile = await profiles.get('player')
+      if (profile) await profiles.put(normalizePlayerProfile(profile))
+    })
   }
 }
 
@@ -112,6 +195,7 @@ export async function initializeDatabase(database = db) {
     database.words.count()
   ])
   if (!profile) await database.profiles.put(defaultProfile)
+  else await database.profiles.put(normalizePlayerProfile(profile))
   const effectiveSettings = settings ? { ...defaultSettings, ...settings } : { ...defaultSettings }
   if (!effectiveSettings.seeded) {
     if (wordCount === 0) await database.words.bulkPut(seedWords)
@@ -130,13 +214,14 @@ export async function requestPersistentStorage(database = db) {
 }
 
 export async function createRecoverySnapshot(reason: string, database = db) {
-  const [words, reviews, assets, profile, settings, xpEvents, rewards] = await Promise.all([
+  const [words, reviews, assets, profile, settings, xpEvents, spiritStoneEvents, rewards] = await Promise.all([
     database.words.toArray(),
     database.reviews.toArray(),
     database.assets.toArray(),
     database.profiles.get('player'),
     database.settings.get('app'),
     database.xpEvents.toArray(),
+    database.spiritStoneEvents.toArray(),
     database.rewards.toArray()
   ])
   const createdAt = Date.now()
@@ -148,9 +233,10 @@ export async function createRecoverySnapshot(reason: string, database = db) {
       words,
       reviews,
       assets,
-      profile: profile || defaultProfile,
+      profile: normalizePlayerProfile(profile),
       settings: settings || defaultSettings,
       xpEvents,
+      spiritStoneEvents,
       rewards
     }
   })
@@ -165,18 +251,20 @@ export async function restoreSnapshot(snapshotId: string, database = db) {
   const data = snapshot.payload
   await database.transaction('rw', [
     database.words, database.reviews, database.assets, database.profiles,
-    database.settings, database.xpEvents, database.rewards
+    database.settings, database.xpEvents, database.spiritStoneEvents, database.rewards
   ], async () => {
     await Promise.all([
       database.words.clear(), database.reviews.clear(), database.assets.clear(),
-      database.profiles.clear(), database.settings.clear(), database.xpEvents.clear(), database.rewards.clear()
+      database.profiles.clear(), database.settings.clear(), database.xpEvents.clear(),
+      database.spiritStoneEvents.clear(), database.rewards.clear()
     ])
     await database.words.bulkPut(data.words)
     await database.reviews.bulkPut(data.reviews)
     await database.assets.bulkPut(data.assets)
-    await database.profiles.put(data.profile)
+    await database.profiles.put(normalizePlayerProfile(data.profile))
     await database.settings.put(data.settings)
     await database.xpEvents.bulkPut(data.xpEvents)
+    await database.spiritStoneEvents.bulkPut(data.spiritStoneEvents || [])
     await database.rewards.bulkPut(data.rewards)
   })
 }
@@ -210,16 +298,30 @@ export async function reviewWord(
 ) {
   const result = await database.transaction('rw', [
     database.words, database.reviews, database.profiles,
-    database.xpEvents, database.rewards
+    database.xpEvents, database.spiritStoneEvents, database.rewards
   ], async () => {
     const word = await database.words.get(wordId)
     if (!word) throw new Error('单词不存在或已被删除')
-    const profile = updateStreak((await database.profiles.get('player')) || defaultProfile, now)
+    const profile = updateStreak(normalizePlayerProfile(await database.profiles.get('player')), now)
     const existingEvents = await database.xpEvents.where('wordId').equals(word.id).toArray()
+    const existingStoneEvents = await database.spiritStoneEvents.where('wordId').equals(word.id).toArray()
     const xp = calculateReviewXp(word, rating, mode, now, existingEvents)
     const dueBefore = word.fsrs.due
     const wasMistake = word.isMistake
     const isStrong = rating === 'good' || rating === 'easy'
+    const newlyMastered = isStrong && !profile.masteredWordIds.includes(word.id)
+    const masteredWordIds = newlyMastered ? [...profile.masteredWordIds, word.id] : profile.masteredWordIds
+    const bondEarned = calculateBondReward(rating, mode, xp.total, newlyMastered)
+    const stones = calculateSpiritStoneReward({
+      word,
+      rating,
+      mode,
+      now,
+      xpAwarded: xp.total,
+      newlyMastered,
+      wasMistake,
+      existingEvents: existingStoneEvents
+    })
     const updatedWord: WordRecord = {
       ...word,
       fsrs: scheduleReview(word.fsrs, rating, new Date(now)),
@@ -235,12 +337,27 @@ export async function reviewWord(
       totalReviews: profile.totalReviews + 1,
       totalNewWords: profile.totalNewWords + (word.firstLearnedAt ? 0 : 1),
       spellingCorrect: profile.spellingCorrect + (mode === 'spelling' && isStrong ? 1 : 0),
-      recoveredMistakes: profile.recoveredMistakes + (wasMistake && isStrong ? 1 : 0)
+      recoveredMistakes: profile.recoveredMistakes + (wasMistake && isStrong ? 1 : 0),
+      masteredWordIds,
+      companionBond: profile.companionBond + bondEarned,
+      spiritStones: profile.spiritStones + stones.total,
+      lifetimeSpiritStones: profile.lifetimeSpiritStones + stones.total
     }
     updatedProfile = refreshTitles(updatedProfile)
     const afterRealm = getRealmProgress(updatedProfile.xp)
+    const beforeCompanion = getCompanionProgress(getMasteredCount(profile))
+    const afterCompanion = getCompanionProgress(getMasteredCount(updatedProfile))
     let reward: RewardCard | undefined
-    if (afterRealm.globalStar > beforeRealm.globalStar || updatedProfile.totalReviews % 50 === 0) {
+    if (afterCompanion.current.id !== beforeCompanion.current.id) {
+      reward = {
+        id: `reward-companion-${afterCompanion.current.id}-${now}`,
+        title: `${afterCompanion.current.relation} · ${afterCompanion.current.keepsake}`,
+        description: afterCompanion.current.title,
+        rarity: afterCompanion.isGirlfriendUnlocked ? 'epic' : 'rare',
+        earnedAt: now
+      }
+      await database.rewards.put(reward)
+    } else if (afterRealm.globalStar > beforeRealm.globalStar || updatedProfile.totalReviews % 50 === 0) {
       reward = {
         id: `reward-${word.id}-${now}`,
         title: afterRealm.globalStar > beforeRealm.globalStar ? `${afterRealm.realm} ${afterRealm.star} 星` : '稳扎稳打',
@@ -252,6 +369,7 @@ export async function reviewWord(
     }
     await database.words.put(updatedWord)
     if (xp.events.length) await database.xpEvents.bulkPut(xp.events)
+    if (stones.events.length) await database.spiritStoneEvents.bulkPut(stones.events)
     await database.profiles.put(updatedProfile)
     const log: ReviewLogRecord = {
       wordId,
@@ -262,11 +380,77 @@ export async function reviewWord(
       dueAfter: updatedWord.fsrs.due,
       isCorrect: rating === 'good' || rating === 'easy',
       answer,
-      xpEarned: xp.total
+      xpEarned: xp.total,
+      bondEarned,
+      spiritStonesEarned: stones.total
     }
     await database.reviews.add(log)
-    return { word: updatedWord, profile: updatedProfile, xp: xp.total, reward }
+    return { word: updatedWord, profile: updatedProfile, xp: xp.total, bondEarned, spiritStones: stones.total, newlyMastered, reward }
   })
   await createRecoverySnapshot('完成复习', database)
   return result
+}
+
+export async function recordCompanionInteraction(database = db, now = Date.now()) {
+  const result = await database.transaction('rw', database.profiles, async () => {
+    const profile = normalizePlayerProfile(await database.profiles.get('player'))
+    const progress = getCompanionProgress(getMasteredCount(profile))
+    if (!progress.isGirlfriendUnlocked) throw new Error(`累计掌握 100 个词后才能解锁知夏的女朋友剧情`)
+    const today = new Date(now)
+    const dateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const alreadyInteracted = profile.lastCompanionInteractionDate === dateKey
+    const nextProfile = alreadyInteracted ? profile : {
+      ...profile,
+      companionBond: profile.companionBond + 5,
+      companionInteractions: profile.companionInteractions + 1,
+      lastCompanionInteractionDate: dateKey
+    }
+    if (!alreadyInteracted) await database.profiles.put(nextProfile)
+    return {
+      profile: nextProfile,
+      bondEarned: alreadyInteracted ? 0 : 5,
+      message: getCompanionDialogue(nextProfile, 'interaction')
+    }
+  })
+  if (result.bondEarned > 0) await createRecoverySnapshot('知夏每日互动', database)
+  return result
+}
+
+export async function purchaseStoreItem(itemId: string, database = db, now = Date.now()) {
+  const item = getStoreItem(itemId)
+  if (!item) throw new Error('商城物品不存在')
+  const result = await database.transaction('rw', [database.profiles, database.spiritStoneEvents], async () => {
+    const profile = normalizePlayerProfile(await database.profiles.get('player'))
+    if (profile.inventoryItemIds.includes(item.id)) return { profile, item, purchased: false }
+    if (profile.spiritStones < item.price) throw new Error(`还差 ${item.price - profile.spiritStones} 枚灵石`)
+    const nextProfile = refreshTitles({
+      ...profile,
+      spiritStones: profile.spiritStones - item.price,
+      inventoryItemIds: [...profile.inventoryItemIds, item.id]
+    })
+    await database.profiles.put(nextProfile)
+    const event: SpiritStoneEvent = {
+      id: `stone:purchase:${item.id}:${now}`,
+      itemId: item.id,
+      kind: 'purchase',
+      amount: -item.price,
+      createdAt: now,
+      dayKey: new Date(now).toISOString().slice(0, 10)
+    }
+    await database.spiritStoneEvents.put(event)
+    return { profile: nextProfile, item, purchased: true }
+  })
+  if (result.purchased) await createRecoverySnapshot(`购买装扮：${result.item.name}`, database)
+  return result
+}
+
+export async function equipStoreItem(itemId: string, database = db) {
+  const item = getStoreItem(itemId)
+  if (!item) throw new Error('装扮不存在')
+  const profile = normalizePlayerProfile(await database.profiles.get('player'))
+  if (!profile.inventoryItemIds.includes(item.id)) throw new Error('请先购买这件装扮')
+  const nextProfile = { ...profile, equippedItemIds: equipByCategory(profile.equippedItemIds, item.id) }
+  await database.profiles.put(nextProfile)
+  await createRecoverySnapshot(`装备装扮：${item.name}`, database)
+  return { profile: nextProfile, item }
 }

@@ -43,15 +43,28 @@ export function useServiceWorkerUpdate() {
   const [updateSW, setUpdateSW] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null)
 
   useEffect(() => {
+    let registration: ServiceWorkerRegistration | undefined
+    const checkForUpdate = () => registration?.update().catch(() => undefined)
+    const checkWhenVisible = () => {
+      if (document.visibilityState === 'visible') checkForUpdate()
+    }
     const update = registerSW({
       immediate: true,
       onNeedRefresh: () => setNeedRefresh(true),
       onOfflineReady: () => setOfflineReady(true),
-      onRegisteredSW: (_url, registration) => {
-        if (registration) window.setInterval(() => registration.update(), 60 * 60 * 1000)
+      onRegisteredSW: (_url, nextRegistration) => {
+        registration = nextRegistration
       }
     })
+    const intervalId = window.setInterval(checkForUpdate, 30 * 60 * 1000)
+    window.addEventListener('focus', checkForUpdate)
+    document.addEventListener('visibilitychange', checkWhenVisible)
     setUpdateSW(() => update)
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', checkForUpdate)
+      document.removeEventListener('visibilitychange', checkWhenVisible)
+    }
   }, [])
 
   return {
@@ -62,4 +75,3 @@ export function useServiceWorkerUpdate() {
     update: () => updateSW?.(true)
   }
 }
-

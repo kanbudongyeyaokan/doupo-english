@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, Check, ChevronRight, Eye, Keyboard, ListChecks, Shuffle, Sparkles, Volume2, X } from 'lucide-react'
-import { db, defaultSettings, reviewWord } from '../db'
+import { ArrowLeft, Check, ChevronRight, Eye, Gem, HeartHandshake, Keyboard, ListChecks, Shuffle, Sparkles, Volume2, X } from 'lucide-react'
+import { db, defaultProfile, defaultSettings, reviewWord } from '../db'
+import { getCompanionDialogue, getCompanionProgress, getMasteredCount } from '../domain/companion'
 import { formatInterval, previewIntervals } from '../domain/fsrs'
 import { buildChoiceOptions, clozeSentence, judgeSpelling } from '../domain/quiz'
 import type { ReviewMode, ReviewRating, RewardCard, WordRecord } from '../types'
@@ -109,6 +110,7 @@ export function ReviewPage() {
   const options = useMemo(readOptions, [])
   const allWords = useLiveQuery(() => db.words.toArray(), [])
   const settings = useLiveQuery(() => db.settings.get('app'), []) || defaultSettings
+  const profile = useLiveQuery(() => db.profiles.get('player'), []) || defaultProfile
   const [mode, setMode] = useState<ReviewMode>(options.mode)
   const [queueIds, setQueueIds] = useState<string[] | null>(null)
   const [index, setIndex] = useState(0)
@@ -117,6 +119,9 @@ export function ReviewPage() {
   const [choiceId, setChoiceId] = useState('')
   const [autoCorrect, setAutoCorrect] = useState<boolean | null>(null)
   const [sessionXp, setSessionXp] = useState(0)
+  const [sessionBond, setSessionBond] = useState(0)
+  const [sessionStones, setSessionStones] = useState(0)
+  const [sessionMastered, setSessionMastered] = useState(0)
   const [settled, setSettled] = useState(false)
   const [reward, setReward] = useState<RewardCard | undefined>()
   const [saving, setSaving] = useState(false)
@@ -159,11 +164,16 @@ export function ReviewPage() {
       <div className={reward ? 'completion-seal reward' : 'completion-seal'}><Sparkles size={34} /></div>
       <span className="eyebrow">专注修炼结算</span>
       <h1>完成 {queue.length} 词</h1>
-      <p>本组获得 <strong>{sessionXp}</strong> 经验。短时重复不会反复获得经验，收益来自按时复习与真实回忆。</p>
+      <p>本组获得 <strong>{sessionXp}</strong> 经验和 <strong>{sessionStones}</strong> 灵石。短时重复不会反复获得收益，奖励来自按时复习与真实回忆。</p>
+      {sessionStones > 0 && <p className="stone-gain"><Gem size={16} />灵石 +{sessionStones}</p>}
+      {(sessionBond > 0 || sessionMastered > 0) && <p className="session-gains">新增掌握 <strong>{sessionMastered}</strong> 词 · 共鸣 <strong>+{sessionBond}</strong></p>}
+      {getCompanionProgress(getMasteredCount(profile)).isGirlfriendUnlocked && (
+        <div className="companion-session-note"><HeartHandshake size={20} /><p><strong>知夏</strong>{getCompanionDialogue(profile, 'completion')}</p></div>
+      )}
       {reward && <div className="reward-reveal"><span>{reward.rarity === 'epic' ? '稀有突破' : '修炼奖励'}</span><strong>{reward.title}</strong><p>{reward.description}</p></div>}
       <div className="completion-actions">
         <button className="primary" type="button" onClick={() => { window.location.hash = '#/home' }}>返回首页</button>
-        <button type="button" onClick={() => { setIndex(0); setSettled(false); setSessionXp(0); setQueueIds(null) }}>再炼一组</button>
+        <button type="button" onClick={() => { setIndex(0); setSettled(false); setSessionXp(0); setSessionBond(0); setSessionStones(0); setSessionMastered(0); setQueueIds(null) }}>再炼一组</button>
       </div>
     </main>
   )
@@ -185,6 +195,9 @@ export function ReviewPage() {
     try {
       const result = await reviewWord(word.id, rating, mode, answer || choiceId)
       setSessionXp((value) => value + result.xp)
+      setSessionBond((value) => value + result.bondEarned)
+      setSessionStones((value) => value + result.spiritStones)
+      if (result.newlyMastered) setSessionMastered((value) => value + 1)
       if (result.reward) setReward(result.reward)
       if (settings.hapticsEnabled && navigator.vibrate) navigator.vibrate(rating === 'again' ? 18 : 10)
       if (index + 1 >= queue.length) setSettled(true)
@@ -252,4 +265,3 @@ export function ReviewPage() {
     </main>
   )
 }
-
