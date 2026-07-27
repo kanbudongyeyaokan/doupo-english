@@ -90,6 +90,10 @@ function incomingWords(data: BackupPackage | VocabularyPackage) {
   return words.map((word) => createWordRecord(word, word.createdAt || Date.now()))
 }
 
+function sameWordContent(left: WordRecord, right: WordRecord) {
+  return JSON.stringify({ ...left, updatedAt: 0 }) === JSON.stringify({ ...right, updatedAt: 0 })
+}
+
 export async function previewImport(data: BackupPackage | VocabularyPackage, database: DoupoEnglishDatabase = db): Promise<ImportPreview> {
   const words = incomingWords(data)
   const local = await database.words.bulkGet(words.map((word) => word.id))
@@ -98,7 +102,7 @@ export async function previewImport(data: BackupPackage | VocabularyPackage, dat
   words.forEach((word, index) => {
     const localWord = local[index]
     if (!localWord) return
-    const same = JSON.stringify({ ...localWord, updatedAt: 0 }) === JSON.stringify({ ...word, updatedAt: 0 })
+    const same = sameWordContent(localWord, word)
     if (same) unchanged += 1
     else conflictWords.push({ id: word.id, local: localWord.term, incoming: word.term })
   })
@@ -121,8 +125,16 @@ export async function importPackage(
   mode: 'merge' | 'replace',
   database: DoupoEnglishDatabase = db
 ) {
-  await createRecoverySnapshot(`导入前保护（${mode === 'merge' ? '合并' : '覆盖'}）`, database)
   const words = incomingWords(data)
+  let local: Array<WordRecord | undefined> | undefined
+  if (mode === 'merge') {
+    local = await database.words.bulkGet(words.map((word) => word.id))
+    const vocabularyIsUnchanged = data.format === 'doupo-english-vocabulary'
+      && local.every((localWord, index) => localWord && sameWordContent(localWord, words[index]))
+    if (vocabularyIsUnchanged) return { importedWords: words.length, mode, unchanged: true }
+  }
+
+  await createRecoverySnapshot(`导入前保护（${mode === 'merge' ? '合并' : '覆盖'}）`, database)
   if (mode === 'replace') {
     if (data.format !== 'doupo-english-backup') throw new Error('覆盖恢复只接受完整 JSON 备份')
     const assets = deserializeAssets(data.payload.assets)
@@ -145,8 +157,7 @@ export async function importPackage(
       await database.rewards.bulkPut(data.payload.rewards)
     })
   } else {
-    const local = await database.words.bulkGet(words.map((word) => word.id))
-    const merged = words.map((word, index) => local[index] ? mergeWord(local[index]!, word) : word)
+    const merged = words.map((word, index) => local![index] ? mergeWord(local![index]!, word) : word)
     await database.words.bulkPut(merged)
     if (data.format === 'doupo-english-backup') {
       const assets = deserializeAssets(data.payload.assets)
@@ -181,8 +192,7 @@ export async function importPackage(
       })
     }
   }
-  await createRecoverySnapshot('导入完成', database)
-  return { importedWords: words.length, mode }
+  return { importedWords: words.length, mode, unchanged: false }
 }
 
 function parseList(value: unknown) {

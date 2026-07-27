@@ -69,8 +69,10 @@ export function ProfilePage({ canInstall, installed, onInstall }: ProfilePagePro
     if (!pending) return
     setWorking(true)
     try {
-      await importPackage(pending.data, mode)
-      setMessage(`已${mode === 'merge' ? '合并导入' : '覆盖恢复'} ${pending.preview.incoming} 个单词`)
+      const result = await importPackage(pending.data, mode)
+      setMessage(result.unchanged
+        ? `数据未变化，已跳过 ${pending.preview.unchanged} 个重复单词`
+        : `已${mode === 'merge' ? '合并导入' : '覆盖恢复'} ${pending.preview.incoming} 个单词`)
       setPending(null)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '导入失败')

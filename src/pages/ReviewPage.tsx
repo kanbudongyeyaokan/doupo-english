@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowLeft, Check, ChevronRight, Eye, Gem, HeartHandshake, Keyboard, ListChecks, Shuffle, Sparkles, Volume2, X } from 'lucide-react'
-import { db, defaultProfile, defaultSettings, reviewWord } from '../db'
+import { createRecoverySnapshot, db, defaultProfile, defaultSettings, reviewWord } from '../db'
 import { getCompanionDialogue, getCompanionProgress, getMasteredCount } from '../domain/companion'
 import { formatInterval, previewIntervals } from '../domain/fsrs'
 import { buildChoiceOptions, clozeSentence, judgeSpelling } from '../domain/quiz'
@@ -200,7 +200,10 @@ export function ReviewPage() {
       if (result.newlyMastered) setSessionMastered((value) => value + 1)
       if (result.reward) setReward(result.reward)
       if (settings.hapticsEnabled && navigator.vibrate) navigator.vibrate(rating === 'again' ? 18 : 10)
-      if (index + 1 >= queue.length) setSettled(true)
+      if (index + 1 >= queue.length) {
+        await createRecoverySnapshot('完成专注组').catch(() => undefined)
+        setSettled(true)
+      }
       else setIndex((value) => value + 1)
     } finally {
       setSaving(false)

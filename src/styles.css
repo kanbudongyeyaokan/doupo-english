@@ -343,6 +343,9 @@ blockquote span { color: var(--muted); font-size: 13px; line-height: 1.55; }
 .row-actions button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); }
 .row-actions button:hover { background: var(--surface-2); color: var(--accent); }
 .row-actions svg { width: 17px; }
+.load-more-row { display: flex; justify-content: center; padding: 14px 0 4px; }
+.load-more-row button { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 0 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--accent); font-weight: 800; }
+.load-more-row small { color: var(--muted); font-size: 10px; font-weight: 600; }
 .empty-state { display: flex; min-height: 250px; flex-direction: column; align-items: center; justify-content: center; padding: 30px; color: var(--muted); text-align: center; }
 .empty-state h2 { margin: 12px 0 5px; color: var(--text); font-size: 19px; }
 .empty-state p { max-width: 420px; line-height: 1.6; }

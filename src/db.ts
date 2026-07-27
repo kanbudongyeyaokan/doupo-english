@@ -387,7 +387,6 @@ export async function reviewWord(
     await database.reviews.add(log)
     return { word: updatedWord, profile: updatedProfile, xp: xp.total, bondEarned, spiritStones: stones.total, newlyMastered, reward }
   })
-  await createRecoverySnapshot('完成复习', database)
   return result
 }
 

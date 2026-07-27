@@ -26,8 +26,10 @@ describe('backup and import', () => {
     const word = createWordRecord({ term: 'merge', source: 'private batch', tags: ['batch-1'] })
     const pkg: VocabularyPackage = { format: 'doupo-english-vocabulary', schemaVersion: 1, words: [word] }
     await importPackage(pkg, 'merge', database)
+    const snapshotsAfterFirstImport = await database.snapshots.count()
     await importPackage(pkg, 'merge', database)
     expect(await database.words.count()).toBe(1)
+    expect(await database.snapshots.count()).toBe(snapshotsAfterFirstImport)
   })
 
   it('restores words, review logs and binary assets from a full JSON package', async () => {

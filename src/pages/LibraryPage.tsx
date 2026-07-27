@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CheckSquare, Edit3, Filter, Plus, Search, Square, Star, Tag, Trash2 } from 'lucide-react'
+import { CheckSquare, ChevronDown, Edit3, Filter, Plus, Search, Square, Star, Tag, Trash2 } from 'lucide-react'
 import { db, deleteWords, createRecoverySnapshot } from '../db'
 import type { WordRecord } from '../types'
 import { WordForm } from '../components/WordForm'
 
 type FilterValue = 'all' | 'favorite' | 'key' | 'mistake' | 'unlearned'
+const PAGE_SIZE = 80
 
 export function LibraryPage() {
   const words = useLiveQuery(() => db.words.orderBy('normalizedTerm').toArray(), [])
@@ -14,16 +15,23 @@ export function LibraryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<WordRecord | null | undefined>(undefined)
   const [bulkTag, setBulkTag] = useState('')
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const deferredQuery = useDeferredValue(query)
 
   const wordList = words || []
-  const filtered = (() => {
-    const needle = query.trim().toLocaleLowerCase()
-    return wordList.filter((word) => {
+  const filtered = useMemo(() => {
+    const needle = deferredQuery.trim().toLocaleLowerCase()
+    return (words || []).filter((word) => {
       const matchText = !needle || [word.term, word.phonetic, word.notes, word.source, ...word.tags, ...word.meanings.flatMap((item) => item.meanings)].join(' ').toLocaleLowerCase().includes(needle)
       const matchFilter = filter === 'all' || (filter === 'favorite' && word.isFavorite) || (filter === 'key' && word.isKey) || (filter === 'mistake' && word.isMistake) || (filter === 'unlearned' && !word.firstLearnedAt)
       return matchText && matchFilter
     })
-  })()
+  }, [deferredQuery, filter, words])
+  const visibleWords = filtered.slice(0, visibleCount)
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [deferredQuery, filter])
 
   const toggleSelection = (id: string) => {
     setSelected((current) => {
@@ -73,7 +81,7 @@ export function LibraryPage() {
       </div>}
 
       <div className="word-list">
-        {filtered.map((word) => {
+        {visibleWords.map((word) => {
           const isSelected = selected.has(word.id)
           return <article className={isSelected ? 'word-row selected' : 'word-row'} key={word.id}>
             <button type="button" className="select-word" onClick={() => toggleSelection(word.id)} aria-label={isSelected ? `取消选择 ${word.term}` : `选择 ${word.term}`}>{isSelected ? <CheckSquare /> : <Square />}</button>
@@ -85,6 +93,14 @@ export function LibraryPage() {
             <div className="row-actions"><button type="button" onClick={() => setEditing(word)} aria-label={`编辑 ${word.term}`} title="编辑"><Edit3 /></button><button type="button" onClick={() => remove([word.id])} aria-label={`删除 ${word.term}`} title="删除"><Trash2 /></button></div>
           </article>
         })}
+        {visibleCount < filtered.length && (
+          <div className="load-more-row">
+            <button type="button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+              <ChevronDown size={18} />继续显示 {Math.min(PAGE_SIZE, filtered.length - visibleCount)} 个
+              <small>已显示 {visibleWords.length} / {filtered.length}</small>
+            </button>
+          </div>
+        )}
         {filtered.length === 0 && <div className="empty-state"><Search size={28} /><h2>没有匹配的单词</h2><p>调整关键词或筛选条件，也可以新增自己的词条。</p></div>}
       </div>
       {editing !== undefined && <WordForm word={editing || undefined} onClose={() => setEditing(undefined)} onSaved={() => setEditing(undefined)} />}
