@@ -216,6 +216,7 @@ export interface VocabularyPackage {
     notes?: string
     updateStrategy?: 'merge' | 'source-authoritative'
   }
+  wordReplacements?: Array<{ fromId: string; toId: string }>
   words: WordRecord[]
 }
 
@@ -226,4 +227,6 @@ export interface ImportPreview {
   conflicts: number
   unchanged: number
   conflictWords: Array<{ id: string; local: string; incoming: string }>
+  replacements: number
+  replacementWords: Array<{ fromId: string; toId: string; from: string; to: string }>
 }

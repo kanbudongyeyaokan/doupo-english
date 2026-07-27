@@ -489,6 +489,8 @@ blockquote span { color: var(--muted); font-size: 13px; line-height: 1.55; }
 .conflict-list > strong { color: var(--danger); font-size: 12px; }
 .conflict-list p { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 0; }
 .conflict-list p span { color: var(--muted); font-size: 11px; }
+.replacement-list { background: var(--accent-soft); }
+.replacement-list > strong { color: var(--accent); }
 .import-preview > p { margin: 15px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .import-preview .dialog-actions { position: static; margin-bottom: -22px; }
 

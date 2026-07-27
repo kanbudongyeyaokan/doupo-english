@@ -31,6 +31,8 @@
 
 `v0.4.2` 起，人工校订包还会清除已被新内容替代的 `OCR扫描导入`、`音标待核对`、`释义待核对`、`正文待核对` 等系统审计标签及其自动备注；用户自己填写的笔记和自定义标签仍会保留。
 
+`v0.4.3` 起，来源权威的人工校订包可声明 `wordReplacements`，把 OCR 错拆词条安全归并到正确稳定 ID。导入预览会明确列出归并关系；执行前会创建恢复快照，并迁移 FSRS 排期、复习记录、经验与灵石事件、掌握记录、用户笔记、标签、收藏、错词和本地媒体引用，再删除旧词条。普通词库包不能使用该能力。
+
 ## 本地运行
 
 需要 Node.js 20 以上，推荐 Node.js 22。
@@ -103,6 +105,7 @@ npm run preview
 - 必考词 Unit 4 的第 37–48 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-37-48.json`。顺序为 `efficiency`、`efficient`、`effort`、`fabric`、`fabricate`、`face`、`facet`、`factor`、`fade`、`fail`、`failure`、`fair`；内容已逐项对照 PDF 书页 28–29，并纠正了 `factor` 被 OCR 误标为跨页词条的问题。该包已通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、错词状态、笔记、标签、收藏和本地图片引用保留验证。
 - 必考词 Unit 4 的第 49–60 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-49-60.json`。顺序为 `fairly`、`fall`、`fan`、`fancy`、`fascinate`、`gain`、`gamble`、`gap`、`gene`、`general`、`generalize/generalise`、`habit`；内容已逐项对照 PDF 书页 29–30，保留了 `fancy` 的跨页来源与多词性结构。该包已通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、错词状态、笔记、标签、收藏和本地图片引用保留验证。
 - 必考词 Unit 4 的第 61–68 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-04-61-68.json`。顺序为 `habitat`、`hamper`、`handicap`、`shield`、`shift`、`shoulder`、`show`、`shower`；内容已逐项对照 PDF 书页 30–31，纠正了 OCR 粘连、词性、音标和“更迭”等问题，并保留 `shift` 的 2018 年考研阅读例句。完整 Unit 4 的 68 词累计包位于 `private-materials/imports/redbook-27-required-unit-04-curated.json`，可直接在手机端一次合并导入；两种包均通过稳定 ID、连续顺序、重复导入去重，以及 FSRS、错词状态、笔记、标签、收藏和本地图片引用保留验证。
+- 必考词 Unit 5 的首组 12 词人工校订包位于 `private-materials/imports/redbook-27-required-unit-05-first-12.json`。顺序为 `glamour/glamor`、`generate`、`generation`、`generator`、`generous`、`genius`、`gift`、`genre`、`giant`、`gigantic`、`give`、`happen`；内容已逐项对照 PDF 书页 32–33。该包会把 OCR 从预览写法误建的 `glamo(u)r` 归并到正文词头 `glamour/glamor`，因此 Unit 5 的正确总数为 84 词；归并已通过稳定 ID、重复导入去重，以及 FSRS、复习事件、经验、灵石、笔记、标签、收藏、错词和本地媒体引用保留验证。
 - PDF 第 365–442 页的内嵌 JPEG 数据流只有 2 字节 `0xFFD9`，页面无法渲染或 OCR；“基础词 Unit 25”因此在 PDF 第 364 页后中断，缺失内容没有猜填。需要补充一份完好的 PDF 或从 PDF 第 365 页开始的清晰扫描，才能继续提取。
 - 上述路径均被 Git 忽略。公开在线应用不内置商业词书内容；在手机上需要把私人 JSON 保存到“文件”，再进入“我的 → 导入 JSON / CSV → 合并导入”。不同浏览器或已安装 PWA 的数据空间可能相互独立。
 

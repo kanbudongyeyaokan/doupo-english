@@ -33,6 +33,19 @@ function mergeNotes(...notes: string[]) {
   return notes.filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n')
 }
 
+function learningRank(word: WordRecord) {
+  return [word.lastReviewedAt || 0, word.fsrs.reps, word.firstLearnedAt || 0]
+}
+
+function hasStrongerLearningState(left: WordRecord, right: WordRecord) {
+  const leftRank = learningRank(left)
+  const rightRank = learningRank(right)
+  for (let index = 0; index < leftRank.length; index += 1) {
+    if (leftRank[index] !== rightRank[index]) return leftRank[index] > rightRank[index]
+  }
+  return false
+}
+
 export function createWordRecord(
   input: Pick<WordRecord, 'term'> & Partial<Omit<WordRecord, 'term'>>,
   now = Date.now()
@@ -95,6 +108,30 @@ export function refreshWordFromSource(local: WordRecord, incoming: WordRecord): 
     firstLearnedAt: local.firstLearnedAt,
     lastReviewedAt: local.lastReviewedAt,
     fsrs: hasLearningHistory ? local.fsrs : incoming.fsrs
+  }
+}
+
+export function mergeWordLearningState(target: WordRecord, legacy: WordRecord): WordRecord {
+  const learningSource = hasStrongerLearningState(legacy, target) ? legacy : target
+  const firstLearnedAt = [target.firstLearnedAt, legacy.firstLearnedAt]
+    .filter((value): value is number => typeof value === 'number')
+    .sort((left, right) => left - right)[0]
+  const lastReviewedAt = Math.max(target.lastReviewedAt || 0, legacy.lastReviewedAt || 0) || undefined
+  return {
+    ...target,
+    tags: mergeUnique(target.tags, legacy.tags),
+    imageIds: mergeUnique(target.imageIds, legacy.imageIds),
+    audioBritishId: target.audioBritishId || legacy.audioBritishId,
+    audioAmericanId: target.audioAmericanId || legacy.audioAmericanId,
+    notes: mergeNotes(stripSourceAuditNotes(target.notes), stripSourceAuditNotes(legacy.notes)),
+    isKey: target.isKey || legacy.isKey,
+    isMistake: target.isMistake || legacy.isMistake,
+    isFavorite: target.isFavorite || legacy.isFavorite,
+    createdAt: Math.min(target.createdAt, legacy.createdAt),
+    updatedAt: Date.now(),
+    firstLearnedAt,
+    lastReviewedAt,
+    fsrs: learningSource.fsrs
   }
 }
 

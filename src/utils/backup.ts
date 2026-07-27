@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
 import { db, defaultSettings, type DoupoEnglishDatabase, createRecoverySnapshot, normalizePlayerProfile } from '../db'
-import { createWordRecord, mergeWord, refreshWordFromSource } from '../domain/word'
+import { createWordRecord, mergeWord, mergeWordLearningState, refreshWordFromSource } from '../domain/word'
 import type {
   BackupPackage,
   ImportPreview,
@@ -10,7 +10,7 @@ import type {
   WordRecord
 } from '../types'
 
-export const APP_VERSION = '0.4.2'
+export const APP_VERSION = '0.4.3'
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = ''
@@ -90,13 +90,36 @@ function incomingWords(data: BackupPackage | VocabularyPackage) {
   return words.map((word) => createWordRecord(word, word.createdAt || Date.now()))
 }
 
+function incomingReplacements(data: BackupPackage | VocabularyPackage, words: WordRecord[]) {
+  if (data.format !== 'doupo-english-vocabulary' || !data.wordReplacements?.length) return []
+  if (data.batch?.updateStrategy !== 'source-authoritative') {
+    throw new Error('词条归并只允许用于来源权威的人工校订包')
+  }
+  const incomingIds = new Set(words.map((word) => word.id))
+  const seenFromIds = new Set<string>()
+  return data.wordReplacements.map((replacement) => {
+    const fromId = replacement?.fromId?.trim()
+    const toId = replacement?.toId?.trim()
+    if (!fromId || !toId || fromId === toId) throw new Error('词条归并包含无效的稳定 ID')
+    if (seenFromIds.has(fromId)) throw new Error(`词条归并重复指定旧 ID：${fromId}`)
+    if (incomingIds.has(fromId)) throw new Error(`待归并的旧 ID 仍存在于传入词条中：${fromId}`)
+    if (!incomingIds.has(toId)) throw new Error(`词条归并目标不在传入词条中：${toId}`)
+    seenFromIds.add(fromId)
+    return { fromId, toId }
+  })
+}
+
 function sameWordContent(left: WordRecord, right: WordRecord) {
   return JSON.stringify({ ...left, updatedAt: 0 }) === JSON.stringify({ ...right, updatedAt: 0 })
 }
 
 export async function previewImport(data: BackupPackage | VocabularyPackage, database: DoupoEnglishDatabase = db): Promise<ImportPreview> {
   const words = incomingWords(data)
-  const local = await database.words.bulkGet(words.map((word) => word.id))
+  const replacements = incomingReplacements(data, words)
+  const [local, legacyWords] = await Promise.all([
+    database.words.bulkGet(words.map((word) => word.id)),
+    database.words.bulkGet(replacements.map((replacement) => replacement.fromId))
+  ])
   const conflictWords: ImportPreview['conflictWords'] = []
   let unchanged = 0
   words.forEach((word, index) => {
@@ -106,13 +129,21 @@ export async function previewImport(data: BackupPackage | VocabularyPackage, dat
     if (same) unchanged += 1
     else conflictWords.push({ id: word.id, local: localWord.term, incoming: word.term })
   })
+  const incomingById = new Map(words.map((word) => [word.id, word]))
+  const replacementWords = replacements.flatMap((replacement, index) => {
+    const legacy = legacyWords[index]
+    const target = incomingById.get(replacement.toId)
+    return legacy && target ? [{ ...replacement, from: legacy.term, to: target.term }] : []
+  })
   return {
     kind: data.format === 'doupo-english-backup' ? 'backup' : 'vocabulary',
     incoming: words.length,
     newWords: words.length - local.filter(Boolean).length,
     conflicts: conflictWords.length,
     unchanged,
-    conflictWords: conflictWords.slice(0, 20)
+    conflictWords: conflictWords.slice(0, 20),
+    replacements: replacementWords.length,
+    replacementWords: replacementWords.slice(0, 20)
   }
 }
 
@@ -126,12 +157,18 @@ export async function importPackage(
   database: DoupoEnglishDatabase = db
 ) {
   const words = incomingWords(data)
+  const replacements = incomingReplacements(data, words)
   let local: Array<WordRecord | undefined> | undefined
+  let legacyWords: Array<WordRecord | undefined> = []
   if (mode === 'merge') {
-    local = await database.words.bulkGet(words.map((word) => word.id))
+    [local, legacyWords] = await Promise.all([
+      database.words.bulkGet(words.map((word) => word.id)),
+      database.words.bulkGet(replacements.map((replacement) => replacement.fromId))
+    ])
     const vocabularyIsUnchanged = data.format === 'doupo-english-vocabulary'
       && local.every((localWord, index) => localWord && sameWordContent(localWord, words[index]))
-    if (vocabularyIsUnchanged) return { importedWords: words.length, mode, unchanged: true }
+      && legacyWords.every((legacyWord) => !legacyWord)
+    if (vocabularyIsUnchanged) return { importedWords: words.length, replacedWords: 0, mode, unchanged: true }
   }
 
   await createRecoverySnapshot(`导入前保护（${mode === 'merge' ? '合并' : '覆盖'}）`, database)
@@ -159,12 +196,44 @@ export async function importPackage(
   } else {
     const sourceAuthoritative = data.format === 'doupo-english-vocabulary'
       && data.batch?.updateStrategy === 'source-authoritative'
+    const legacyByTarget = new Map<string, WordRecord[]>()
+    replacements.forEach((replacement, index) => {
+      const legacy = legacyWords[index]
+      if (!legacy) return
+      legacyByTarget.set(replacement.toId, [...(legacyByTarget.get(replacement.toId) || []), legacy])
+    })
     const merged = words.map((word, index) => {
-      const localWord = local![index]
+      let localWord = local![index]
+      for (const legacy of legacyByTarget.get(word.id) || []) {
+        localWord = mergeWordLearningState(localWord || word, legacy)
+      }
       if (!localWord) return word
       return sourceAuthoritative ? refreshWordFromSource(localWord, word) : mergeWord(localWord, word)
     })
-    await database.words.bulkPut(merged)
+    const activeReplacements = replacements.filter((_replacement, index) => Boolean(legacyWords[index]))
+    if (activeReplacements.length) {
+      await database.transaction('rw', [
+        database.words, database.reviews, database.assets, database.profiles,
+        database.xpEvents, database.spiritStoneEvents
+      ], async () => {
+        await database.words.bulkPut(merged)
+        for (const replacement of activeReplacements) {
+          await database.reviews.where('wordId').equals(replacement.fromId).modify({ wordId: replacement.toId })
+          await database.assets.where('wordId').equals(replacement.fromId).modify({ wordId: replacement.toId })
+          await database.xpEvents.where('wordId').equals(replacement.fromId).modify({ wordId: replacement.toId })
+          await database.spiritStoneEvents.where('wordId').equals(replacement.fromId).modify({ wordId: replacement.toId })
+        }
+        const profile = normalizePlayerProfile(await database.profiles.get('player'))
+        const replacementMap = new Map(activeReplacements.map((replacement) => [replacement.fromId, replacement.toId]))
+        await database.profiles.put({
+          ...profile,
+          masteredWordIds: [...new Set(profile.masteredWordIds.map((id) => replacementMap.get(id) || id))]
+        })
+        await database.words.bulkDelete(activeReplacements.map((replacement) => replacement.fromId))
+      })
+    } else {
+      await database.words.bulkPut(merged)
+    }
     if (data.format === 'doupo-english-backup') {
       const assets = deserializeAssets(data.payload.assets)
       await database.assets.bulkPut(assets)
@@ -198,7 +267,7 @@ export async function importPackage(
       })
     }
   }
-  return { importedWords: words.length, mode, unchanged: false }
+  return { importedWords: words.length, replacedWords: legacyWords.filter(Boolean).length, mode, unchanged: false }
 }
 
 function parseList(value: unknown) {

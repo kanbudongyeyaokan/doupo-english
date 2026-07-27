@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { DoupoEnglishDatabase, initializeDatabase, reviewWord } from '../db'
 import { createWordRecord } from '../domain/word'
 import type { VocabularyPackage } from '../types'
-import { createBackupPackage, importPackage, parseWordsCsv, wordsToCsv } from './backup'
+import { createBackupPackage, importPackage, parseWordsCsv, previewImport, wordsToCsv } from './backup'
 
 const databases: DoupoEnglishDatabase[] = []
 function makeDb() {
@@ -80,6 +80,81 @@ describe('backup and import', () => {
     expect(refreshed?.tags).not.toContain('OCR扫描导入')
     expect(refreshed?.tags).not.toContain('音标待核对')
     expect(refreshed?.tags).not.toContain('释义待核对')
+  })
+
+  it('replaces an OCR duplicate while migrating all learning references to the corrected stable ID', async () => {
+    const database = makeDb()
+    await initializeDatabase(database)
+    await database.words.clear()
+    const source = 'private redbook'
+    const legacy = createWordRecord({
+      term: 'glamo(u)r',
+      source,
+      notes: '我的旧词笔记',
+      tags: ['OCR扫描导入', '自定义魅力标签'],
+      imageIds: ['asset-glamour'],
+      isFavorite: true,
+      isMistake: true
+    })
+    const target = createWordRecord({
+      term: 'glamour/glamor',
+      source,
+      meanings: [{ partOfSpeech: 'n.', meanings: ['OCR 旧释义'] }]
+    })
+    await database.words.bulkPut([legacy, target])
+    await database.assets.put({
+      id: 'asset-glamour', wordId: legacy.id, kind: 'image', name: 'note.png',
+      mimeType: 'image/png', blob: new Blob(['note']), createdAt: 100
+    })
+    await reviewWord(legacy.id, 'good', 'en-zh', '', database, 20_000)
+    const reviewedLegacy = await database.words.get(legacy.id)
+    expect(reviewedLegacy?.fsrs.reps).toBeGreaterThan(0)
+
+    const corrected = createWordRecord({
+      id: target.id,
+      term: 'glamour/glamor',
+      source,
+      sourceOrder: 1,
+      meanings: [{ partOfSpeech: 'n.', meanings: ['迷人的美；魅力，吸引力'] }],
+      tags: ['红宝书私人导入', '人工校对']
+    })
+    const pkg: VocabularyPackage = {
+      format: 'doupo-english-vocabulary',
+      schemaVersion: 1,
+      batch: { source, chapters: ['必考词'], units: ['Unit 5'], updateStrategy: 'source-authoritative' },
+      wordReplacements: [{ fromId: legacy.id, toId: target.id }],
+      words: [corrected]
+    }
+
+    const preview = await previewImport(pkg, database)
+    expect(preview.replacements).toBe(1)
+    expect(preview.replacementWords).toEqual([{
+      fromId: legacy.id, toId: target.id, from: 'glamo(u)r', to: 'glamour/glamor'
+    }])
+
+    const result = await importPackage(pkg, 'merge', database)
+    expect(result.replacedWords).toBe(1)
+    expect(await database.words.count()).toBe(1)
+    expect(await database.words.get(legacy.id)).toBeUndefined()
+    const migrated = await database.words.get(target.id)
+    expect(migrated?.sourceOrder).toBe(1)
+    expect(migrated?.meanings[0].meanings).toEqual(['迷人的美；魅力，吸引力'])
+    expect(migrated?.notes).toContain('我的旧词笔记')
+    expect(migrated?.tags).toContain('自定义魅力标签')
+    expect(migrated?.tags).not.toContain('OCR扫描导入')
+    expect(migrated?.imageIds).toContain('asset-glamour')
+    expect(migrated?.isFavorite).toBe(true)
+    expect(migrated?.fsrs).toEqual(reviewedLegacy?.fsrs)
+    expect(await database.reviews.where('wordId').equals(target.id).count()).toBe(1)
+    expect(await database.reviews.where('wordId').equals(legacy.id).count()).toBe(0)
+    expect((await database.assets.get('asset-glamour'))?.wordId).toBe(target.id)
+    expect(await database.xpEvents.where('wordId').equals(legacy.id).count()).toBe(0)
+    expect(await database.xpEvents.where('wordId').equals(target.id).count()).toBeGreaterThan(0)
+    expect(await database.spiritStoneEvents.where('wordId').equals(legacy.id).count()).toBe(0)
+    expect(await database.spiritStoneEvents.where('wordId').equals(target.id).count()).toBeGreaterThan(0)
+    expect((await database.profiles.get('player'))?.masteredWordIds).toContain(target.id)
+    expect((await database.profiles.get('player'))?.masteredWordIds).not.toContain(legacy.id)
+    expect(await database.snapshots.count()).toBeGreaterThan(0)
   })
 
   it('restores words, review logs and binary assets from a full JSON package', async () => {
