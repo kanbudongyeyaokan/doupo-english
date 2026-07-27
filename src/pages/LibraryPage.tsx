@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { BookOpen, CheckSquare, ChevronDown, Edit3, Filter, Plus, Search, Square, Star, Tag, Trash2 } from 'lucide-react'
 import { db, deleteWords, createRecoverySnapshot } from '../db'
-import { summarizeUnits } from '../domain/units'
+import { compareWordSourceOrder, summarizeUnits } from '../domain/units'
 import type { WordRecord } from '../types'
 import { WordForm } from '../components/WordForm'
 
@@ -27,12 +27,13 @@ export function LibraryPage() {
   const units = chapter ? unitSummaries.filter((item) => item.chapter === chapter) : []
   const filtered = useMemo(() => {
     const needle = deferredQuery.trim().toLocaleLowerCase()
-    return (words || []).filter((word) => {
+    const matches = (words || []).filter((word) => {
       const matchText = !needle || [word.term, word.phonetic, word.notes, word.source, ...word.tags, ...word.meanings.flatMap((item) => item.meanings)].join(' ').toLocaleLowerCase().includes(needle)
       const matchFilter = filter === 'all' || (filter === 'favorite' && word.isFavorite) || (filter === 'key' && word.isKey) || (filter === 'mistake' && word.isMistake) || (filter === 'unlearned' && !word.firstLearnedAt)
       const matchUnit = (!chapter || word.chapter === chapter) && (!unit || word.unit === unit)
       return matchText && matchFilter && matchUnit
     })
+    return unit ? matches.sort(compareWordSourceOrder) : matches
   }, [chapter, deferredQuery, filter, unit, words])
   const visibleWords = filtered.slice(0, visibleCount)
 

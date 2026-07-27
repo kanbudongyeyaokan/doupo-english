@@ -43,6 +43,7 @@ export function createWordRecord(
     source,
     chapter: input.chapter || '',
     unit: input.unit || '',
+    sourceOrder: input.sourceOrder,
     page: input.page || '',
     notes: input.notes || '',
     tags: input.tags || [],
@@ -57,6 +58,29 @@ export function createWordRecord(
     firstLearnedAt: input.firstLearnedAt,
     lastReviewedAt: input.lastReviewedAt,
     fsrs: input.fsrs || createStoredCard(new Date(now))
+  }
+}
+
+export function refreshWordFromSource(local: WordRecord, incoming: WordRecord): WordRecord {
+  const mergeUnique = (left: string[], right: string[]) => [...new Set([...left, ...right].filter(Boolean))]
+  const hasLearningHistory = Boolean(local.firstLearnedAt || local.lastReviewedAt || local.fsrs.reps)
+  return {
+    ...incoming,
+    id: local.id,
+    normalizedTerm: normalizeTerm(incoming.term),
+    tags: mergeUnique(local.tags, incoming.tags),
+    imageIds: mergeUnique(local.imageIds, incoming.imageIds),
+    audioBritishId: incoming.audioBritishId || local.audioBritishId,
+    audioAmericanId: incoming.audioAmericanId || local.audioAmericanId,
+    notes: [local.notes, incoming.notes].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n'),
+    isKey: local.isKey || incoming.isKey,
+    isMistake: local.isMistake,
+    isFavorite: local.isFavorite,
+    createdAt: Math.min(local.createdAt, incoming.createdAt),
+    updatedAt: Date.now(),
+    firstLearnedAt: local.firstLearnedAt,
+    lastReviewedAt: local.lastReviewedAt,
+    fsrs: hasLearningHistory ? local.fsrs : incoming.fsrs
   }
 }
 
@@ -94,4 +118,3 @@ export function mergeWord(local: WordRecord, incoming: WordRecord): WordRecord {
     fsrs: local.fsrs
   }
 }
-

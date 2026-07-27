@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
 import { db, defaultSettings, type DoupoEnglishDatabase, createRecoverySnapshot, normalizePlayerProfile } from '../db'
-import { createWordRecord, mergeWord } from '../domain/word'
+import { createWordRecord, mergeWord, refreshWordFromSource } from '../domain/word'
 import type {
   BackupPackage,
   ImportPreview,
@@ -10,7 +10,7 @@ import type {
   WordRecord
 } from '../types'
 
-export const APP_VERSION = '0.4.0'
+export const APP_VERSION = '0.4.1'
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = ''
@@ -157,7 +157,13 @@ export async function importPackage(
       await database.rewards.bulkPut(data.payload.rewards)
     })
   } else {
-    const merged = words.map((word, index) => local![index] ? mergeWord(local![index]!, word) : word)
+    const sourceAuthoritative = data.format === 'doupo-english-vocabulary'
+      && data.batch?.updateStrategy === 'source-authoritative'
+    const merged = words.map((word, index) => {
+      const localWord = local![index]
+      if (!localWord) return word
+      return sourceAuthoritative ? refreshWordFromSource(localWord, word) : mergeWord(localWord, word)
+    })
     await database.words.bulkPut(merged)
     if (data.format === 'doupo-english-backup') {
       const assets = deserializeAssets(data.payload.assets)

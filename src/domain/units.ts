@@ -43,3 +43,13 @@ export function summarizeUnits(words: WordRecord[], now = Date.now()) {
 export function inUnit(word: WordRecord, chapter: string, unit: string) {
   return (!chapter || word.chapter === chapter) && (!unit || word.unit === unit)
 }
+
+export function compareWordSourceOrder(left: WordRecord, right: WordRecord) {
+  const leftOrder = left.sourceOrder ?? Number.MAX_SAFE_INTEGER
+  const rightOrder = right.sourceOrder ?? Number.MAX_SAFE_INTEGER
+  return leftOrder - rightOrder || left.term.localeCompare(right.term, 'en')
+}
+
+export function compareWordStudyOrder(left: WordRecord, right: WordRecord) {
+  return left.fsrs.due - right.fsrs.due || compareWordSourceOrder(left, right)
+}

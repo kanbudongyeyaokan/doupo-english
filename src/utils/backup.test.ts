@@ -32,6 +32,47 @@ describe('backup and import', () => {
     expect(await database.snapshots.count()).toBe(snapshotsAfterFirstImport)
   })
 
+  it('refreshes corrected source content without resetting learning state or user flags', async () => {
+    const database = makeDb()
+    await initializeDatabase(database)
+    await database.words.clear()
+    const original = createWordRecord({
+      term: 'largely',
+      source: 'private redbook',
+      meanings: [{ partOfSpeech: 'adv.', meanings: ['OCR 旧释义'] }],
+      examples: [{ english: 'This country is largelyed esert.', chinese: '旧例句' }],
+      notes: '我的本地笔记',
+      isFavorite: true,
+      firstLearnedAt: 1000,
+      fsrs: { due: 5000, stability: 2, difficulty: 3, elapsed_days: 1, scheduled_days: 2, learning_steps: 0, reps: 4, lapses: 0, state: 2 }
+    })
+    await database.words.put(original)
+    const corrected = createWordRecord({
+      term: 'largely',
+      source: 'private redbook',
+      sourceOrder: 2,
+      meanings: [{ partOfSpeech: 'adv.', meanings: ['大量地，大规模地', '主要地，基本上'] }],
+      examples: [{ english: 'This country is largely desert.', chinese: '这个国家大部分都是沙漠。' }],
+      notes: '教材页已人工校对'
+    })
+    const pkg: VocabularyPackage = {
+      format: 'doupo-english-vocabulary',
+      schemaVersion: 1,
+      batch: { source: 'private redbook', chapters: ['必考词'], units: ['Unit 1'], updateStrategy: 'source-authoritative' },
+      words: [corrected]
+    }
+
+    await importPackage(pkg, 'merge', database)
+    const refreshed = await database.words.get(original.id)
+    expect(refreshed?.examples.map((item) => item.english)).toEqual(['This country is largely desert.'])
+    expect(refreshed?.meanings[0].meanings).not.toContain('OCR 旧释义')
+    expect(refreshed?.sourceOrder).toBe(2)
+    expect(refreshed?.isFavorite).toBe(true)
+    expect(refreshed?.firstLearnedAt).toBe(1000)
+    expect(refreshed?.fsrs).toEqual(original.fsrs)
+    expect(refreshed?.notes).toContain('我的本地笔记')
+  })
+
   it('restores words, review logs and binary assets from a full JSON package', async () => {
     const source = makeDb()
     await initializeDatabase(source)

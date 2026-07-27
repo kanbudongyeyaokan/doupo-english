@@ -53,6 +53,7 @@ export interface WordRecord {
   source: string
   chapter: string
   unit: string
+  sourceOrder?: number
   page: string
   notes: string
   tags: string[]
@@ -213,6 +214,7 @@ export interface VocabularyPackage {
     chapters: string[]
     units: string[]
     notes?: string
+    updateStrategy?: 'merge' | 'source-authoritative'
   }
   words: WordRecord[]
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createWordRecord } from './word'
-import { inUnit, summarizeUnits } from './units'
+import { compareWordSourceOrder, compareWordStudyOrder, inUnit, summarizeUnits } from './units'
 
 describe('book unit helpers', () => {
   it('sorts Red Book chapters and units in study order', () => {
@@ -14,6 +14,14 @@ describe('book unit helpers', () => {
       '必考词/Unit 2',
       '基础词/Unit 10'
     ])
+  })
+
+  it('keeps curated words in their source unit order', () => {
+    const now = Date.now()
+    const later = createWordRecord({ term: 'radiant', sourceOrder: 2 }, now)
+    const first = createWordRecord({ term: 'radiate', sourceOrder: 1 }, now)
+    expect([later, first].sort(compareWordSourceOrder).map((word) => word.term)).toEqual(['radiate', 'radiant'])
+    expect([later, first].sort(compareWordStudyOrder).map((word) => word.term)).toEqual(['radiate', 'radiant'])
   })
 
   it('counts unseen, due and mistake words per unit', () => {

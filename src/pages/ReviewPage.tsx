@@ -5,7 +5,7 @@ import { createRecoverySnapshot, db, defaultProfile, defaultSettings, reviewWord
 import { getCompanionDialogue, getCompanionProgress, getMasteredCount } from '../domain/companion'
 import { formatInterval, previewIntervals } from '../domain/fsrs'
 import { buildChoiceOptions, clozeSentence, judgeSpelling } from '../domain/quiz'
-import { inUnit } from '../domain/units'
+import { compareWordStudyOrder, inUnit } from '../domain/units'
 import type { ReviewMode, ReviewRating, RewardCard, WordRecord } from '../types'
 import { WordImage } from '../components/WordImage'
 
@@ -63,12 +63,12 @@ function speak(word: WordRecord, accent: 'british' | 'american') {
 
 function buildQueue(words: WordRecord[], queue: string, limit: number) {
   const now = Date.now()
-  const sorted = [...words].sort((a, b) => a.fsrs.due - b.fsrs.due)
+  const sorted = [...words].sort(compareWordStudyOrder)
   if (queue === 'new') return sorted.filter((word) => !word.firstLearnedAt).slice(0, limit)
   if (queue === 'mistakes') return sorted.filter((word) => word.isMistake).slice(0, limit)
   if (queue === 'random') return words.length ? [words[Math.floor(Math.random() * words.length)]] : []
   if (queue === 'quick') {
-    return sorted.sort((a, b) => Number(b.isMistake) - Number(a.isMistake) || a.fsrs.due - b.fsrs.due).slice(0, limit)
+    return sorted.sort((a, b) => Number(b.isMistake) - Number(a.isMistake) || compareWordStudyOrder(a, b)).slice(0, limit)
   }
   if (queue === 'all') return sorted.slice(0, limit)
   return sorted.filter((word) => Boolean(word.firstLearnedAt) && word.fsrs.due <= now).slice(0, limit)
